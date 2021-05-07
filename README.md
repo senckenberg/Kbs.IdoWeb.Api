@@ -1,59 +1,43 @@
-# Kbs.IdoWeb.Api
+# BODENTIER hoch 4 - Kbs.IdoWeb.Api
 
-## 3. Abstract
-Kbs.IdoWeb.Api is an .net core Application that offers a generic API to deliver background services and data to the Kbs.IdoWeb.WordPress based websites (see bodentierhoch4.de)  
+## Inhaltsverzeichnis  
+- [Kurzbeschreibung](#Kurzbeschreibung)
+  - [Förderhinweis](#Förderhinweis)
+- [Installation](#Installation)
+- [Benutzung](#Benutzung)
+- [Credits](#Credits)
+- [Lizenz](#Lizenz)
 
+## Kurzbeschreibung
+Kbs.IdoWeb.Api ist eine .net-Kernapplikation, die eine generische API bietet, um Hintergrunddienste und Daten an die Kbs.IdoWeb.WordPress-basierten Websites zu liefern (siehe bodentierhoch4.de).
 
-### Förderhinweis 
-This .net core application is part of the project museum4punkt0 - Digital Strategies for the 
-Museum of the Future, sub-project [englischer Teilprojektname einfügen, gemäß 
-museum4punkt0-Website]. The project museum4punkt0 is funded by the Federal Government 
-Commissioner for Culture and the Media in accordance with a resolution issued by the German 
-Bundestag (Parliament of the Federal Republic of Germany). Further information: 
-www.museum4punkt0.de/en/
+### Förderhinweis
+Diese .net-Kernapplikation ist Teil des Projektes museum4punkt0 - Digitale Strategien für das Museum der Zukunft, Teilprojekt „BODENTIER hoch 4“. Das Projekt museum4punkt0 wird gefördert durch die  Beauftragte der Bundesregierung für Kultur und Medien aufgrund eines Beschlusses des Deutschen Bundestages.  
+Weitere Informationen: [www.museum4punkt0.de](https://www.museum4punkt0.de/)
 
-## 4. Installation 
-  1. Install Visual Studio
-  2. Install .net core framework
+## Installation
+  1. Install [Visual Studio](https://visualstudio.microsoft.com/downloads/)
+  2. Install [.NET Core](https://dotnet.microsoft.com/download)
   3. Load Project Solution Kbs.IdoWeb.Api
   4. Adjust appsettings
   5. Start Debug Session for local development
-  
-## 5. Benutzung / Usage 
-cf. 4. Installation
 
-### Beschreiben Sie die Benutzung der Anwendung nach der Installation. Fügen Sie bestenfalls 
-Screenshots ein, um die Handhabung zu illustrieren. Auch Anforderungen an Geräte / 
-Ausstattung bzw. Systemvoraussetzungen für den Betrieb sollten hier genannt sein. Falls Ihre 
-Anwendung über ein Backend verfügt, sollte Ihnen ein Benutzerhandbuch für die BackendNutzung vorliegen. Stellen Sie dieses bitte auch zur Verfügung, indem Sie es (als PDF/A-3) im 
-Github-Repositorium hochladen und in der Readme-Datei darauf verlinken. Existiert zudem ein 
-Betriebskonzept, sollten Sie dieses von hier aus per Link zugänglich machen.  
-?
+## Benutzung
+siehe [Installation](#Installation)
 
-## 6. Beteiligung / Contributing (optional) 
-Geben Sie hier an, ob und in welcher Art man sich an Ihrer Programmierung beteiligen kann. 
-Detailinformationen werden in einer separaten Datei angelegt. Weitere Hinweise hierzu finden 
-Sie unter https://help.github.com/en/articles/setting-guidelines-for-repository-contributors 
-?
+>Beschreiben Sie die Benutzung der Anwendung nach der Installation. Fügen Sie bestenfalls Screenshots ein, um die Handhabung zu illustrieren. Auch Anforderungen an Geräte/Ausstattung bzw. Systemvoraussetzungen für den Betrieb sollten hier genannt sein. Falls Ihre Anwendung über ein Backend verfügt, sollte Ihnen ein Benutzerhandbuch für die Backend-Nutzung vorliegen. Stellen Sie dieses bitte auch zur Verfügung, indem Sie es (als PDF/A-3) im Github-Repositorium hochladen und in der Readme-Datei darauf verlinken. Existiert zudem ein Betriebskonzept, sollten Sie dieses von hier aus per Link zugänglich machen.  
 
-## 7. Credits 
-AuftraggeberInnen/RechteinhaberInnen (Name Ihrer Institution)
-UrheberInnen (Namen der beteiligten EntwicklerInnen oder Firma)3 Bereitstellung digitaler Anwendungen
-?
+## Credits  
+Auftraggeber/Rechteinhaber: [Senckenberg Museum für Naturkunde Görlitz](https://museumgoerlitz.senckenberg.de/)  
+Entwicklung: [Kunert Business Software GmbH](https://www.kbs-leipzig.de/kbsweb/)
 
-### Authors
-Kunert Business Software GmbH  
-Deutscher Platz 5c  
-04103 Leipzig  
-mail: info[at]kbs-leipzig.de  
-Germany  
-http://www.kbs-leipzig.de/kbsweb/  
+## Lizenz  
+Kbs.IdoWeb.Api Copyright © 2021 Senckenberg Museum für Naturkunde Görlitz; entwickelt von Kunert Business Software GmbH, im Rahmen des Verbundprojekts museum4punkt0.
 
+Dieses Programm ist freie Software: Sie können es unter den Bedingungen der GNU General Public License, wie von der Free Software Foundation veröffentlicht, weitergeben und/oder modifizieren, entweder in Version 3 der Lizenz oder (nach Ihrer Wahl) in einer späteren Version.
 
-## 8. Lizenz / License 
-Rechteangabe nach dem Schema: Copyright © Jahr, Institution / UrheberIn.
-Geben Sie hier an, unter welcher Lizenz der Quellcode / die Anwendung steht. Fügen Sie dabei 
-den Lizenztext direkt im Readme ein bzw. linken Sie zu dem zutreffenden Lizenztext. 
-Bitte fügen Sie ferner eine Liste der Lizenzen für wiederverwendete Programmteile Dritter der 
-Dokumentation hinzu.  
-?
+Dieses Programm wird in der Hoffnung verteilt, dass es nützlich ist, aber OHNE JEGLICHE GARANTIE; sogar ohne die stillschweigende Garantie der MARKTREIFE oder der EIGNUNG FÜR EINEN BESTIMMTEN ZWECK. Siehe die GNU General Public License für weitere Details.
+
+Sie sollten zusammen mit diesem Programm ein Exemplar der GNU General Public License erhalten haben. Falls nicht, siehe https://www.gnu.org/licenses/.
+
+[![LICENSE.md](https://img.shields.io/badge/License-GPLv3-blue.svg)](/LICENSE.md)
