@@ -1,4 +1,4 @@
-# BODENTIERhoch4-Kbs.IdoWeb.Api
+# BODENTIER hoch 4 - Kbs.IdoWeb.Api
 
 ## Inhaltsverzeichnis  
 - [Kurzbeschreibung](#Kurzbeschreibung)
