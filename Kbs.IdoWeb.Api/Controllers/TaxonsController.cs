@@ -160,7 +160,7 @@ namespace Kbs.IdoWeb.Api.Controllers
                     .Distinct()
                     .AsNoTracking();
 
-                var images = _obsContext.Image.Where(img => img.TaxonId.HasValue).ToList();
+                var images = _obsContext.Image.Where(img => img.TaxonId.HasValue).OrderBy(i => i.ImagePriority).ToList();
 
                 var taxonImages = images
                     .Where(img => taxonItems.Select(tItems => tItems.TaxonId).Contains(img.TaxonId.Value))
@@ -220,7 +220,7 @@ namespace Kbs.IdoWeb.Api.Controllers
                             },
                             Synonyms = taxItem.taxonItem.Synonyms != null? JsonConvert.DeserializeObject(taxItem.taxonItem.Synonyms): null
                         },
-                        taxImage = taxItem.taxImage.Where(t => t.LicenseId != null).ToList(),
+                        taxImage = taxItem.taxImage.Where(t => t.LicenseId != null).OrderBy(i => i.ImagePriority).ToList(),
                         taxonDesc = taxdesc.GroupBy(td => td.KeyGroupName).Select(td => new { KeyGroupName = td.Key, DescriptionKeys = td.Select(tdProp => new { tdProp.KeyName, tdProp.MaxValue, tdProp.MinValue }) })
                     })
                     .GroupBy(tax => new { tax.taxonItem }).ToList().Select(x => new { x.Key.taxonItem, taxonImages = x.Select(i => i.taxImage).ToList(), taxonDescriptions = x.Select(j => j.taxonDesc) });

@@ -1,5 +1,4 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -26,11 +25,11 @@ namespace Kbs.IdoWeb.Data.Observation
         public int? CmsId { get; set; }
         [StringLength(100)]
         public string TaxonName { get; set; }
+        public int? ImagePriority { get; set; }
 
         [ForeignKey("LicenseId")]
         [InverseProperty("Image")]
         public virtual ImageLicense License { get; set; }
-        [JsonIgnore]
         [ForeignKey("ObservationId")]
         [InverseProperty("Image")]
         public virtual Observation Observation { get; set; }

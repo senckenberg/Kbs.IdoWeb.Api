@@ -1,5 +1,4 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -46,7 +45,6 @@ namespace Kbs.IdoWeb.Data.Observation
         [ForeignKey("HabitatTypeId")]
         [InverseProperty("Event")]
         public virtual HabitatType HabitatType { get; set; }
-        [JsonIgnore]
         [InverseProperty("Event")]
         public virtual ICollection<Observation> Observation { get; set; }
     }

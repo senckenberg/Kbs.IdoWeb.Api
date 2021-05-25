@@ -25,6 +25,7 @@ namespace Kbs.IdoWeb.Api.Controllers
     {
         private readonly ObservationContext _obsContext;
         private readonly LocationContext _locContext;
+        private readonly InformationContext _infContext;
         private readonly PublicContext _idoContext;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly List<int> positiveApprovalStates = new List<int>(new int[] { 3, 5, 6 });
@@ -43,6 +44,7 @@ namespace Kbs.IdoWeb.Api.Controllers
             _obsContext = obsContext;
             _locContext = locContext;
             _idoContext = idoContext;
+            _infContext = infContext;
         }
 
         /**
@@ -163,6 +165,13 @@ namespace Kbs.IdoWeb.Api.Controllers
                 {
                     _userId = _user.Id;
                     var obsId = 0;
+                    int? taxonId_edited = null;
+                    //if user users horn-old app version --> name lookup
+                    if (_infContext.Taxon.FirstOrDefault(tx => tx.TaxonId == adviceObject.TaxonId) == null)
+                    {
+                        taxonId_edited = _infContext.Taxon.Where(tx => tx.TaxonName == adviceObject.TaxonFullName).Select(tx => tx.TaxonId).FirstOrDefault();
+                    }
+
                     if (adviceObject.ObservationId == 0)
                     {
                         Event adviceEvent = new Event();
@@ -198,7 +207,15 @@ namespace Kbs.IdoWeb.Api.Controllers
                         adviceObservation.MaleCount = adviceObject.MaleCount;
                         adviceObservation.ObservationComment = adviceObject.Comment;
                         //adviceObservation.SizeGroupId = adviceObject.AdviceCount;
-                        adviceObservation.TaxonId = adviceObject.TaxonId;
+
+                        if (taxonId_edited != null)
+                        {
+                            adviceObservation.TaxonId = (int)taxonId_edited;
+                        }
+                        else
+                        {
+                            adviceObservation.TaxonId = adviceObject.TaxonId;
+                        }
                         adviceObservation.TaxonName = adviceObject.TaxonFullName;
                         adviceObservation.LastEditDate = DateTime.Now;
                         _obsContext.Observation.Add(adviceObservation);
@@ -223,7 +240,14 @@ namespace Kbs.IdoWeb.Api.Controllers
                             img_new.LicenseId = 1;
                             img_new.UserId = _userId;
                             img_new.Author = adviceEvent.AuthorName;
-                            img_new.TaxonId = adviceObservation.TaxonId;
+                            if (taxonId_edited != null)
+                            {
+                                img_new.TaxonId = (int)taxonId_edited;
+                            }
+                            else
+                            {
+                                img_new.TaxonId = adviceObservation.TaxonId;
+                            }
                             img_new.TaxonName = adviceObservation.TaxonName;
                             _obsContext.Add(img_new);
                         }
@@ -244,7 +268,15 @@ namespace Kbs.IdoWeb.Api.Controllers
                         obs_tbu.MaleCount = adviceObject.MaleCount;
                         obs_tbu.ObservationComment = adviceObject.Comment;
                         //adviceObservation.SizeGroupId = adviceObject.AdviceCount;
-                        obs_tbu.TaxonId = adviceObject.TaxonId;
+
+                        if (taxonId_edited != null)
+                        {
+                            obs_tbu.TaxonId = (int)taxonId_edited;
+                        }
+                        else
+                        {
+                            obs_tbu.TaxonId = adviceObject.TaxonId;
+                        }
                         obs_tbu.TaxonName = adviceObject.TaxonFullName;
                         obs_tbu.LastEditDate = DateTime.Now;
                         _obsContext.Observation.Update(obs_tbu);
@@ -668,7 +700,8 @@ namespace Kbs.IdoWeb.Api.Controllers
                     if (!roles.Contains("Admin"))
                     {
                         oldObs = _obsContext.Observation.FirstOrDefault(obs => obs.ObservationId == obsId && obs.UserId == _userId);
-                    } else
+                    }
+                    else
                     {
                         oldObs = _obsContext.Observation.FirstOrDefault(obs => obs.ObservationId == obsId);
                     }

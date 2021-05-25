@@ -240,7 +240,7 @@ namespace Kbs.IdoWeb.Api.Controllers
                             await _userManager.AddToRoleAsync(applicationUser, role);
                             return "success";
                         }
-                        return "error";
+                        return result.Errors.First().Description.ToString();
                     }
                 }
                 catch (Exception ex)
