@@ -8,6 +8,7 @@ namespace Kbs.IdoWeb.Data.Authentication
 	public class ApplicationSettings
 	{
 		public string JWT_Secret { get; set; }
+		public string CNC_Secret { get; set; }
 
 	}
 }

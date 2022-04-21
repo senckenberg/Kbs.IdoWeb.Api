@@ -7,6 +7,7 @@ namespace Kbs.IdoWeb.Data.Public
 {
     public partial class AspNetUserRoles
     {
+        [Key]
         public string UserId { get; set; }
         public string RoleId { get; set; }
 

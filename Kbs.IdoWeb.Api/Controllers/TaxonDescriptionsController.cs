@@ -661,7 +661,7 @@ namespace Kbs.IdoWeb.Api.Controllers
                     **/
 
                     //TODO: REWRITE BELOW!!!
-                    //Get all available rest DKs from TaxDesc
+                    //Get all available remaining DKs from TaxDesc
                     var dkIdList = dkList.Select(dk => dk.DescriptionKeyId).ToList();
                     taxDescList.RemoveAll(td => !dkIdList.Contains(td.DescriptionKeyId));
 
@@ -806,7 +806,7 @@ namespace Kbs.IdoWeb.Api.Controllers
                 foreach (int dkId in dkList)
                 {
                     var temp_dkgid = _detContext.DescriptionKey.AsNoTracking().Where(dk => dk.DescriptionKeyId == dkId).Select(dk => dk.DescriptionKeyGroupId).FirstOrDefault();
-                    var predVal = CombineKeys(dkId, temp_dkgid, taxonIdList != null ? taxonIdList : null);
+                    var predVal = CombineKeys(dkId, temp_dkgid, taxonIdList);
                     //rewrite below to also allow 0-value DKIds (as of 29-04-20)
                     //if (predVal > 0) { result.Add(dkId, predVal); }
                     result.Add(dkId, predVal);

@@ -17,6 +17,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 
 namespace Kbs.IdoWeb.Api.Controllers
 {
@@ -141,10 +142,75 @@ namespace Kbs.IdoWeb.Api.Controllers
             }
         }
 
+        [HttpPost("Login/MobileV2")]
+        public async Task<string> LoginMobileAsync_v2 (LoginModelMobile loginModel)
+        {
+            try
+            {
+
+                AspNetUserDevices device = _idoContext.AspNetUserDevices.Where(i => i.DeviceId == loginModel.deviceId).FirstOrDefault();
+
+                if (device == null)
+                {
+                    var user = await _userManager.FindByNameAsync(Uri.UnescapeDataString(loginModel.username));
+                    if (user != null && await _userManager.CheckPasswordAsync(user, Uri.UnescapeDataString(loginModel.password)))
+                    {
+                        device = new AspNetUserDevices
+                        {
+                            DeviceGuid = Guid.NewGuid(),
+                            DeviceId = loginModel.deviceId,
+                            UserId = user.Id,
+                            LastAccess = DateTime.MinValue
+                        };
+                        _idoContext.Add(device);
+                        _idoContext.SaveChanges();
+                    }
+
+
+                    MD5 md5 = System.Security.Cryptography.MD5.Create();
+
+                    byte[] inputBytes = System.Text.Encoding.ASCII.GetBytes(device.DeviceId + device.DeviceGuid.ToString());
+
+                    byte[] hash = md5.ComputeHash(inputBytes);
+
+
+                    // step 2, convert byte array to hex string
+
+                    StringBuilder sb = new StringBuilder();
+
+                    for (int i = 0; i < hash.Length; i++)
+                    {
+                        sb.Append(hash[i].ToString("X2"));
+                    }
+
+                    device.LastAccess = DateTime.Now;
+                    device.DeviceHash = sb.ToString();
+                    _idoContext.Update(device);
+                    _idoContext.SaveChanges();
+
+                    return JsonConvert.SerializeObject(new { DeviceHash = sb.ToString(), FirstName = user.FirstName, LastName = user.LastName });
+                }
+                else
+                {
+                    var user = await _userManager.FindByNameAsync(Uri.UnescapeDataString(loginModel.username));
+                    if(user != null)
+                    {
+                        return JsonConvert.SerializeObject(new { DeviceHash = device.DeviceHash.ToString(), FirstName = user.FirstName, LastName = user.LastName });
+                    }
+                    return "invalid user";
+                }
+            }
+            catch (Exception e)
+            {
+                return "invalid user";
+            }
+        }
+
+
 
         [HttpPost("Login")]
         //POST : /api/ApplicationUser/Login
-        public async Task<ActionResult>PostLogin(LoginModel login)
+        public async Task<ActionResult> PostLogin(LoginModel login)
         {
             var user = await _userManager.FindByNameAsync(Uri.UnescapeDataString(login.Email));
             if (user != null && await _userManager.CheckPasswordAsync(user, Uri.UnescapeDataString(login.Password)))
@@ -300,8 +366,9 @@ namespace Kbs.IdoWeb.Api.Controllers
                 IdentityResult result = await _userManager.ResetPasswordAsync(user, reset.Token, reset.NewPassword);
                 try
                 {
-                   
-                } catch (Exception e)
+
+                }
+                catch (Exception e)
                 {
                     var msg = e.Message;
                 }

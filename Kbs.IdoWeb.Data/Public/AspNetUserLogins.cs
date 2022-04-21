@@ -7,6 +7,7 @@ namespace Kbs.IdoWeb.Data.Public
 {
     public partial class AspNetUserLogins
     {
+        [Key]
         [StringLength(128)]
         public string LoginProvider { get; set; }
         [StringLength(128)]

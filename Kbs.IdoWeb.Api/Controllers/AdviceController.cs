@@ -6,15 +6,24 @@ using Kbs.IdoWeb.Data.Mapping;
 using Kbs.IdoWeb.Data.Observation;
 using Kbs.IdoWeb.Data.Public;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Npgsql;
 using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Security.Cryptography;
+using System.Security.Permissions;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace Kbs.IdoWeb.Api.Controllers
@@ -28,9 +37,13 @@ namespace Kbs.IdoWeb.Api.Controllers
         private readonly InformationContext _infContext;
         private readonly PublicContext _idoContext;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ApplicationSettings _appSettings;
         private readonly List<int> positiveApprovalStates = new List<int>(new int[] { 3, 5, 6 });
         private string _userId;
         private string imgSavePath = "~/./wordpress/wp-content/uploads/user_uploads/";
+        private string imgPublicUrl = "https://bodentierhochvier.de/wp-content/uploads/";
+        private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
+        private static List<Observation> observationListByUser;
 
         /***
         ** Advice = Event + Observation
@@ -38,13 +51,14 @@ namespace Kbs.IdoWeb.Api.Controllers
         ** Observation = Fund
         ** Observation = ObservationInfo + optional List of Images
         ***/
-        public AdviceController(UserManager<ApplicationUser> userManager, DeterminationContext detContext, InformationContext infContext, ObservationContext obsContext, MappingContext mapContext, LocationContext locContext, PublicContext idoContext)
+        public AdviceController(UserManager<ApplicationUser> userManager, DeterminationContext detContext, InformationContext infContext, ObservationContext obsContext, MappingContext mapContext, LocationContext locContext, PublicContext idoContext, IOptions<ApplicationSettings> appSettings)
         {
             _userManager = userManager;
             _obsContext = obsContext;
             _locContext = locContext;
             _idoContext = idoContext;
             _infContext = infContext;
+            _appSettings = appSettings.Value;
         }
 
         /**
@@ -55,52 +69,69 @@ namespace Kbs.IdoWeb.Api.Controllers
         //POST : /api/Advice/SaveAdvice
         public async Task<ActionResult> PostSaveAdvice(AdviceObject adviceObject)
         {
-            _userId = User.Claims.First(i => i.Type == "UserId").Value;
-            ApplicationUser _user = _userManager.Users.First(u => u.Id == _userId);
-            var user = await _userManager.FindByIdAsync(_userId);
-            var roles = await _userManager.GetRolesAsync(user);
-
-            Event adviceEvent = adviceObject;
-            adviceEvent.UserId = _userId;
-            adviceEvent.AuthorName = adviceObject.AuthorName;
-            adviceEvent.TkNr = await GetTk25Id(adviceEvent.LatitudeDecimal, adviceEvent.LongitudeDecimal);
-            _obsContext.Event.Add(adviceEvent);
-            _obsContext.SaveChanges();
-
-            foreach (ObservationImage adviceObservation in adviceObject.ObservationList)
+            try
             {
-                adviceObservation.EventId = adviceEvent.EventId;
-                adviceObservation.UserId = _userId;
-                adviceObservation.LastEditDate = DateTime.Now;
 
-                if (adviceObservation.ApprovalStateId == null)
+                _userId = User.Claims.First(i => i.Type == "UserId").Value;
+                ApplicationUser _user = _userManager.Users.First(u => u.Id == _userId);
+                var user = await _userManager.FindByIdAsync(_userId);
+                var roles = await _userManager.GetRolesAsync(user);
+                Event adviceEvent = new Event();
+
+                if (adviceObject.EventId != null)
                 {
-                    adviceObservation.ApprovalStateId = 1;
+                    adviceEvent = _obsContext.Event.Where(e => e.EventId == adviceObject.EventId).FirstOrDefault();
+                    if (adviceEvent == null)
+                    {
+                        adviceEvent = adviceObject;
+                        adviceEvent.UserId = _userId;
+                        adviceEvent.AuthorName = adviceObject.AuthorName;
+                        adviceEvent.TkNr = await GetTk25Id(adviceEvent.LatitudeDecimal, adviceEvent.LongitudeDecimal);
+                        _obsContext.Event.Add(adviceEvent);
+                        _obsContext.SaveChanges();
+                    }
                 }
 
-                foreach (Image img in adviceObservation.Image)
+                foreach (ObservationImage adviceObservation in adviceObject.ObservationList)
                 {
-                    img.ImagePath = "user_uploads/" + img.ImagePath;
-                    img.CmsId = img.CmsId;
-                    img.Description = adviceObservation.ObservationComment;
-                    img.CopyrightText = img.CopyrightText;
-                    img.LicenseId = 1;
-                    img.UserId = _userId;
-                    img.Author = adviceEvent.AuthorName;
-                    img.TaxonId = adviceObservation.TaxonId;
-                    img.TaxonName = adviceObservation.TaxonName;
-                    _obsContext.Add(img);
+                    adviceObservation.EventId = adviceEvent.EventId;
+                    adviceObservation.UserId = _userId;
+                    adviceObservation.LastEditDate = DateTime.Now;
+
+                    if (adviceObservation.ApprovalStateId == null)
+                    {
+                        adviceObservation.ApprovalStateId = 1;
+                    }
+
+                    foreach (Image img in adviceObservation.Image)
+                    {
+                        img.ImagePath = "user_uploads/" + img.ImagePath;
+                        img.CmsId = img.CmsId;
+                        img.Description = adviceObservation.ObservationComment;
+                        img.CopyrightText = img.CopyrightText;
+                        img.LicenseId = 1;
+                        img.UserId = _userId;
+                        img.Author = adviceEvent.AuthorName;
+                        img.TaxonId = adviceObservation.TaxonId;
+                        img.TaxonName = adviceObservation.TaxonName;
+                        _obsContext.Add(img);
+                    }
+
+                    _obsContext.Observation.Add(adviceObservation);
+                    _obsContext.SaveChanges();
+                    var obsId = adviceObservation.ObservationId;
+
+                    _obsContext.SaveChanges();
                 }
 
-                _obsContext.Observation.Add(adviceObservation);
                 _obsContext.SaveChanges();
-                var obsId = adviceObservation.ObservationId;
-
-                _obsContext.SaveChanges();
+                return Ok(new { succeeded = true, errors = new string[] { } });
             }
-
-            _obsContext.SaveChanges();
-            return Ok(new { succeeded = true, errors = new string[] { } });
+            catch (Exception ex)
+            {
+                var inner = ex.InnerException;
+                return Ok(new { succeeded = false, errors = new string[] { } });
+            }
         }
 
 
@@ -153,6 +184,107 @@ namespace Kbs.IdoWeb.Api.Controllers
         ** create ADVICE (EVENT + OBSERVATION)
         ** comes from mobile
         **/
+        [HttpPost("SyncAdviceList/Mobile")]
+        //POST : /api/Advice/SyncAdviceList/Mobile
+        public async Task<ActionResult> PostSyncAdviceListFromMobile([FromBody] List<AdviceJsonItemSync> adviceObjectList)
+        {
+            try
+            {
+                //_userId = User.Claims.First(i => i.Type == "UserId").Value;
+
+                ApplicationUser _user = _userManager.Users.FirstOrDefault(u => u.Email.Equals(adviceObjectList.FirstOrDefault().UserName));
+                if (_user != null)
+                {
+                    observationListByUser = _obsContext.Observation.Where(i => i.UserId.Equals(_user.Id))
+                        .Include(i => i.Image)
+                        .Include(i => i.Event)
+                        .ToList();
+
+                    List<AdviceJsonItemSync> ajiList_server = observationListByUser.Select(i => ConvertToJsonForSync(i)).ToList();
+
+                    List<AdviceJsonItemSync> syncedresultList = new List<AdviceJsonItemSync>();
+                    List<AdviceJsonItemSync> toBeDeletedList = new List<AdviceJsonItemSync>();
+
+                    foreach (AdviceJsonItemSync adviceObject in adviceObjectList)
+                    {
+                        adviceObject.IsSynced = true;
+                        AdviceJsonItemSync ajiList_server_item = ajiList_server.FirstOrDefault(i => i.Identifier.Equals(adviceObject.Identifier));
+                        //matching advice identfiers
+                        if (ajiList_server_item != null)
+                        {
+                            //advice previously synced, now to be deleted
+                            if (adviceObject.DeletionDate != null && ajiList_server_item.DeletionDate == null)
+                            {
+                                //DeleteObservationAsync(_obsContext.Observation.FirstOrDefault(i => i.ObservationId.Equals(ajiList_server_item.ObservationId)));
+                                toBeDeletedList.Add(ajiList_server_item);
+                            }
+
+                            //same values?                            
+                            if (!ajiList_server_item.Md5Checksum.Equals(adviceObject.Md5Checksum))
+                            {
+                                //compare last edit
+                                var lastEditCompare = ajiList_server_item.LastEditDate.CompareTo(adviceObject.LastEditDate);
+                                //server newer
+                                if (lastEditCompare < 0)
+                                {
+                                    syncedresultList.Add(ajiList_server_item);
+                                }
+                                //equal
+                                else if (lastEditCompare == 0)
+                                {
+                                    //??
+                                }
+                                //remote newer
+                                else
+                                {
+                                    syncedresultList.Add(adviceObject);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            syncedresultList.Add(adviceObject);
+                        }
+                    }
+
+                    var dbg = syncedresultList;
+
+                    foreach (AdviceJsonItemSync ajiList_server_item in ajiList_server)
+                    {
+                        ajiList_server_item.IsSynced = true;
+                        var dbg3 = adviceObjectList.Select(i => i.Identifier).ToList();
+                        if (!adviceObjectList.Select(i => i.Identifier).ToList().Contains(ajiList_server_item.Identifier))
+                        {
+                            if(ajiList_server_item.DeletionDate == null)
+                            {
+                                syncedresultList.Add(ajiList_server_item);
+                            }
+                        }                        
+                    }
+
+
+
+                    var dbg2 = syncedresultList;
+
+                    //_obsContext.SaveChanges();
+
+                    return Ok(new { succeeded = true, errors = new string[] { }, AdviceList = syncedresultList });
+                }
+                else
+                {
+                    return Unauthorized();
+                }
+            }
+            catch (Exception e)
+            {
+                return BadRequest(JsonConvert.SerializeObject(e.Message));
+            }
+        }
+
+        /**
+        ** create ADVICE (EVENT + OBSERVATION)
+        ** comes from mobile
+        **/
         [HttpPost("SaveAdvice/Mobile")]
         //POST : /api/Advice/SaveAdvice/Mobile
         public async Task<ActionResult> PostSaveAdviceFromMobile(AdviceJsonItem adviceObject)
@@ -167,9 +299,16 @@ namespace Kbs.IdoWeb.Api.Controllers
                     var obsId = 0;
                     int? taxonId_edited = null;
                     //if user users horn-old app version --> name lookup
-                    if (_infContext.Taxon.FirstOrDefault(tx => tx.TaxonId == adviceObject.TaxonId) == null)
+                    if (adviceObject.TaxonId > 0)
                     {
-                        taxonId_edited = _infContext.Taxon.Where(tx => tx.TaxonName == adviceObject.TaxonFullName).Select(tx => tx.TaxonId).FirstOrDefault();
+                        if (_infContext.Taxon.FirstOrDefault(tx => tx.TaxonId == adviceObject.TaxonId) == null)
+                        {
+                            taxonId_edited = _infContext.Taxon.Where(tx => tx.TaxonName == adviceObject.TaxonFullName).Select(tx => tx.TaxonId).FirstOrDefault();
+                        }
+                    }
+                    else
+                    {
+                        adviceObject.TaxonFullName = "Unbekannte Art";
                     }
 
                     if (adviceObject.ObservationId == 0)
@@ -341,7 +480,7 @@ namespace Kbs.IdoWeb.Api.Controllers
                 var response = _obsContext.Observation
                     .Include(obs => obs.Image)
                     .Include(obs => obs.Event)
-                    .Where(i => i.UserId == _userId)
+                    .Where(i => i.UserId == _userId && i.DeletionDate != null)
                     .Select(obs => new { obs.Event.LocalityName, obs.AdviceCount, obs.ApprovalStateId, obs.DiagnosisTypeId, obs.EventId, obs.Event.RegionId, obs.FemaleCount, obs.HabitatDate, obs.HabitatDateTo, obs.Image, obs.JuvenileCount, obs.LocalityTypeId, obs.MaleCount, obs.ObservationComment, obs.ObservationId, obs.SizeGroupId, obs.TaxonId, obs.UserId, obs.Event.AuthorName });
                 return Ok(JsonConvert.SerializeObject(response));
             }
@@ -384,6 +523,53 @@ namespace Kbs.IdoWeb.Api.Controllers
             catch (Exception e)
             {
                 return BadRequest(JsonConvert.SerializeObject(e.Message));
+            }
+        }
+
+        [HttpGet("Observations/CNC")]
+        //GET : /api/Observations/CNC
+        public ActionResult<CNCObservationItem> GetObservationsCNC()
+        {
+            try
+            {
+                string cncKey = _appSettings.CNC_Secret;
+                List<Tk25Item> tk25List = GetAllTk25();
+
+                var response = _obsContext.Observation
+                    .Where(obs => obs.Image != null && obs.User != null && obs.ApprovalStateId.Equals(5))
+                    .Include(obs => obs.Image)
+                        .ThenInclude(img => img.License).AsNoTracking()
+                    .Include(obs => obs.Event).AsNoTracking()
+                    .Include(obs => obs.User).AsNoTracking()
+                    .Where(obs => obs.User.DataRestrictionId > 0)
+                    .Select(obs => new CNCObservationItem()
+                    {
+                        Image_URL = !String.IsNullOrEmpty(obs.Image.FirstOrDefault().ImagePath) ? $@"{imgPublicUrl}{obs.Image.FirstOrDefault().ImagePath}" : null,
+                        Attribution = obs.User.DataRestrictionId.Equals(1) ? "Obscured Lat, Long to TK25 Center Lat, Long. Obscured Sighting_date to year to January, 1st of the sighting's year" : null,
+                        License_type = obs.Image != null ? obs.Image.FirstOrDefault().License != null ? obs.Image.FirstOrDefault().License.LicenseName : "© All rights reserved" : "© All rights reserved",
+                        Latitude = obs.User.DataRestrictionId.Equals(1) ? tk25List.FirstOrDefault(t => t.Tk25Nr == obs.Event.TkNr).Wgs84CenterLat : (decimal)obs.Event.LatitudeDecimal,
+                        Longitude = obs.User.DataRestrictionId.Equals(1) ? tk25List.FirstOrDefault(t => t.Tk25Nr == obs.Event.TkNr).Wgs84CenterLong : (decimal)obs.Event.LongitudeDecimal,
+                        Is_Obscured = obs.User != null ? obs.User.DataRestrictionId.Equals(1) : false,
+                        Sighting_address = obs.Event != null ? obs.Event.LocalityName : null,
+                        Sighting_date = obs.User.DataRestrictionId.Equals(1) ? DateTime.Parse($@"01-01-{ obs.HabitatDate.ToString("yyyy")}") : obs.HabitatDate,
+                        Field_notes = obs.Event != null ? $@"{obs.Event.HabitatDescription}; {obs.ObservationComment}" : null,
+                        Timezone = TimeZoneInfo.FindSystemTimeZoneById("CET").StandardName,
+                        Sighting_ID = obs.ObservationId.ToString(),
+                        User_id = EncryptString(obs.UserId, cncKey),
+                        User_name = String.IsNullOrEmpty(obs.AuthorName) ? $@"{obs.User.LastName}, {obs.User.FirstName}" : obs.AuthorName,
+                        Species = obs.TaxonName
+                    }).ToList();
+
+                Logger.Error(JsonConvert.SerializeObject(response));
+
+                return Ok(JsonConvert.SerializeObject(response));
+            }
+            catch (Exception ex)
+            {
+                //return Ok(JsonConvert.SerializeObject(e.Message));
+                Trace.WriteLine(ex.Message);
+                Logger.Error(ex);
+                return new StatusCodeResult(StatusCodes.Status500InternalServerError);
             }
         }
 
@@ -616,7 +802,14 @@ namespace Kbs.IdoWeb.Api.Controllers
                         {
                             _obsContext.Remove(img);
                         }
-                        _obsContext.Remove(obs);
+                        if (!obs.IsSynced)
+                        {
+                            _obsContext.Remove(obs);
+                        }
+                        else
+                        {
+                            obs.DeletionDate = DateTime.Now;
+                        }
                         _obsContext.SaveChanges();
                     }
                     else
@@ -831,6 +1024,8 @@ namespace Kbs.IdoWeb.Api.Controllers
             }
         }
 
+
+
         public class ObservationImage : Observation
         {
             public List<ImageIncoming> Images;
@@ -846,6 +1041,8 @@ namespace Kbs.IdoWeb.Api.Controllers
             public List<ObservationImage> ObservationList { get; set; }
         }
 
+
+        [Serializable]
         public class AdviceJsonItem
         {
             public int AdviceId { get; set; }
@@ -857,6 +1054,7 @@ namespace Kbs.IdoWeb.Api.Controllers
             public string TaxonFullName { get; set; }
 
             public DateTime AdviceDate { get; set; }
+            public DateTime? DeletionDate { get; set; }
 
             public int? AdviceCount { get; set; }
 
@@ -902,8 +1100,327 @@ namespace Kbs.IdoWeb.Api.Controllers
             public int? LocalityTemplateId { get; set; }
             public int ObservationId { get; set; }
             public AdviceImageJsonItem[] Images { get; set; }
+            [DataMember]
+            public Guid Identifier { get; set; }
+            public string Md5Checksum { get; set; }
+            public DateTime LastEditDate { get; set; }
+            public AdviceJsonItem()
+            {
+
+            }
         }
 
+        [DataContract]
+        [Serializable]
+        public class AdviceJsonItemSync : ISerializable
+        {
+            [DataMember]
+            public int ObservationId { get; set; }
+            [DataMember]
+            public string UserName { get; set; }
+            [DataMember]
+            public int AdviceId { get; set; }
+            [DataMember]
+            public int TaxonId { get; set; }
+            [DataMember]
+            public string TaxonFullName { get; set; }
+            [DataMember]
+            public DateTime? AdviceDate { get; set; }
+            [DataMember]
+            public DateTime? DeletionDate { get; set; }
+            [DataMember]
+            public int? AdviceCount { get; set; }
+            [DataMember]
+            public string AdviceCity { get; set; }
+            [DataMember]
+            public int? MaleCount { get; set; }
+            [DataMember]
+            public int? FemaleCount { get; set; }
+            [DataMember]
+            public bool StateEgg { get; set; }
+            [DataMember]
+            public bool StateLarva { get; set; }
+            [DataMember]
+            public bool StateImago { get; set; }
+            [DataMember]
+            public bool StateNymph { get; set; }
+            [DataMember]
+            public bool StatePupa { get; set; }
+            [DataMember]
+            public bool StateDead { get; set; }
+            [DataMember]
+            public string Comment { get; set; }
+            [DataMember]
+            public string ReportedByName { get; set; }
+            [DataMember]
+            public decimal? Lat { get; set; }
+            [DataMember]
+            public decimal? Lon { get; set; }
+            [DataMember]
+            public int? AccuracyType { get; set; }
+            [DataMember]
+            public string DeviceId { get; set; }
+            [DataMember]
+            public string DeviceHash { get; set; }
+            [DataMember]
+            public int? LocalityTemplateId { get; set; }
+            [DataMember]
+            public DateTime LastEditDate { get; set; }
+            [DataMember]
+            public Guid Identifier { get; set; }
+            [DataMember]
+            public string Md5Checksum { get; set; }
+            public AdviceImageJsonItem[] Images { get; set; }
+            public bool IsSynced { get; set; }
+
+            public AdviceJsonItemSync() { }
+            protected AdviceJsonItemSync(SerializationInfo info, StreamingContext context)
+            {
+                if (info == null)
+                    throw new System.ArgumentNullException("info");
+                //name_value = (string)info.GetValue("AltName", typeof(string));
+                //ID_value = (int)info.GetValue("AltID", typeof(int));
+                ObservationId = (int)info.GetValue("ObservationId", typeof(int));
+                //infGetValueue("Id", Id);
+                UserName = (string)info.GetValue("UserName", typeof(string));
+                AdviceId = (int)info.GetValue("AdviceId", typeof(int));
+                LastEditDate = (DateTime)info.GetValue("LastEditDate", typeof(DateTime));
+                DeletionDate = (DateTime?) info.GetValue("DeletionDate", typeof(DateTime?));
+                Identifier = (Guid)info.GetValue("Identifier", typeof(Guid));
+                TaxonId = (int)info.GetValue("TaxonId", typeof(int));
+                TaxonFullName = (string)info.GetValue("TaxonFullName", typeof(string));
+                AdviceDate = (DateTime)info.GetValue("AdviceDate", typeof(DateTime));
+                AdviceCount = (int)info.GetValue("AdviceCount", typeof(int));
+                AdviceCity = (string)info.GetValue("AdviceCity", typeof(string));
+                MaleCount = (int)info.GetValue("MaleCount", typeof(int));
+                FemaleCount = (int)info.GetValue("FemaleCount", typeof(int));
+                StateEgg = (bool)info.GetValue("StateEgg", typeof(bool));
+                StateLarva = (bool)info.GetValue("StateLarva", typeof(bool));
+                StateImago = (bool)info.GetValue("StateImago", typeof(bool));
+                StateNymph = (bool)info.GetValue("StateNymph", typeof(bool));
+                StatePupa = (bool)info.GetValue("StatePupa", typeof(bool));
+                StateDead = (bool)info.GetValue("StateDead", typeof(bool));
+                Comment = (string)info.GetValue("Comment", typeof(string));
+                ReportedByName = (string)info.GetValue("ReportedByName", typeof(string));
+                //infGetValueue("ReportedByUserId", ReportedByUserId);
+                //infGetValueue("ImageCopyright", ImageCopyright);
+                //infGetValueue("ImageLegend", ImageLegend);
+                //infGetValueue("UploadCode", UploadCode);
+                Lat = (decimal?)info.GetValue("Lat", typeof(decimal?));
+                Lon = (decimal?)info.GetValue("Lon", typeof(decimal?));
+                //infGetValueue("AreaWkt", AreaWkt);
+                //infGetValueue("Zoom", Zoom);
+                AccuracyType = (int)info.GetValue("AccuracyType", typeof(int));
+                DeviceId = (string)info.GetValue("DeviceId", typeof(string));
+                DeviceHash = (string)info.GetValue("DeviceHash", typeof(string));
+                LocalityTemplateId = (int)info.GetValue("LocalityTemplateId", typeof(int));
+                Md5Checksum = (string)info.GetValue("Md5Checksum", typeof(string));
+                Images = (AdviceImageJsonItem[])info.GetValue("Images", typeof(AdviceImageJsonItem[]));
+                IsSynced = (bool)info.GetValue("IsSynced", typeof(bool));
+            }
+
+            protected virtual void GetObjectData(SerializationInfo info, StreamingContext context)
+            {
+                info.AddValue("ObservationId", ObservationId);
+                //info.AddValue("Id", Id);
+                info.AddValue("UserName", UserName);
+                info.AddValue("AdviceId", AdviceId);
+                info.AddValue("LastEditDate", LastEditDate);
+                info.AddValue("Identifier", Identifier);
+                info.AddValue("TaxonId", TaxonId);
+                info.AddValue("TaxonFullName", TaxonFullName);
+                info.AddValue("AdviceDate", AdviceDate);
+                info.AddValue("AdviceCount", AdviceCount);
+                info.AddValue("AdviceCity", AdviceCity);
+                info.AddValue("MaleCount", MaleCount);
+                info.AddValue("FemaleCount", FemaleCount);
+                info.AddValue("StateEgg", StateEgg);
+                info.AddValue("StateLarva", StateLarva);
+                info.AddValue("StateImago", StateImago);
+                info.AddValue("StateNymph", StateNymph);
+                info.AddValue("StatePupa", StatePupa);
+                info.AddValue("StateDead", StateDead);
+                info.AddValue("Comment", Comment);
+                info.AddValue("ReportedByName", ReportedByName);
+                //info.AddValue("ReportedByUserId", ReportedByUserId);
+                //info.AddValue("ImageCopyright", ImageCopyright);
+                //info.AddValue("ImageLegend", ImageLegend);
+                //info.AddValue("UploadCode", UploadCode);
+                info.AddValue("Lat", Lat);
+                info.AddValue("Lon", Lon);
+                //info.AddValue("AreaWkt", AreaWkt);
+                //info.AddValue("Zoom", Zoom);
+                info.AddValue("AccuracyType", AccuracyType);
+                info.AddValue("DeviceId", DeviceId);
+                info.AddValue("DeviceHash", DeviceHash);
+                info.AddValue("LocalityTemplateId", LocalityTemplateId);
+                info.AddValue("Md5Checksum", Md5Checksum);
+                info.AddValue("Images", Images);
+                info.AddValue("DeletionDate", DeletionDate);
+                info.AddValue("IsSynced", IsSynced);
+
+            }
+
+            void ISerializable.GetObjectData(SerializationInfo info, StreamingContext context)
+            {
+                if (info == null)
+                    throw new ArgumentNullException("info");
+
+                GetObjectData(info, context);
+            }
+
+            public void GenerateItemHash()
+            {
+                string hash = ComputeHash(ObjectToByteArray(this));
+                Md5Checksum = hash;
+            }
+
+            private static readonly Object locker = new Object();
+
+            private static byte[] ObjectToByteArray(Object objectToSerialize)
+            {
+                MemoryStream fs = new MemoryStream();
+                BinaryFormatter formatter = new BinaryFormatter();
+                try
+                {
+                    //Here's the core functionality! One Line!
+                    //To be thread-safe we lock the object
+                    lock (locker)
+                    {
+                        formatter.Serialize(fs, objectToSerialize);
+                    }
+                    return fs.ToArray();
+                }
+                catch (SerializationException se)
+                {
+                    Console.WriteLine("Error occurred during serialization. Message: " +
+                    se.Message);
+                    return null;
+                }
+                finally
+                {
+                    fs.Close();
+                }
+            }
+
+            private static string ComputeHash(byte[] objectAsBytes)
+            {
+                MD5 md5 = new MD5CryptoServiceProvider();
+                try
+                {
+                    byte[] result = md5.ComputeHash(objectAsBytes);
+
+                    // Build the final string by converting each byte
+                    // into hex and appending it to a StringBuilder
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < result.Length; i++)
+                    {
+                        sb.Append(result[i].ToString("X2"));
+                    }
+
+                    // And return it
+                    return sb.ToString();
+                }
+                catch (ArgumentNullException ane)
+                {
+                    //If something occurred during serialization, 
+                    //this method is called with a null argument. 
+                    Console.WriteLine("Hash has not been generated.");
+                    return null;
+                }
+
+            }
+
+        }
+
+        public AdviceJsonItemSync ConvertToJsonForSync(Observation rm)
+        {
+            try
+            {
+                string baseString;
+                List<AdviceImageJsonItem> baseList = new List<AdviceImageJsonItem>();
+                List<AdviceImageJsonItem> audioList = new List<AdviceImageJsonItem>();
+                //string username = _userManager.FindByIdAsync(_userId).Result.
+                /*
+                var fileHelper = new FileHelper();
+                List<MediaFileModel> selectedMedia = Database.GetMediaAsync(rm.LocalRecordId).Result;
+                string userName = Database.GetUserName();
+
+                foreach (MediaFileModel media in selectedMedia)
+                {
+                    baseString = fileHelper.GetBase64FromImagePath(media.Path);
+                    baseList.Add(new AdviceImageJsonItem(baseString, media.Path));
+                }
+                */
+
+                var tempTaxon = _infContext.Taxon.FirstOrDefault(i => i.TaxonId == (int)(rm.TaxonId));
+                if (tempTaxon == null)
+                {
+                    tempTaxon = _infContext.Taxon.FirstOrDefault(i => i.TaxonName == rm.TaxonName);
+                }
+                var taxonName = (tempTaxon != null) ? tempTaxon.TaxonName : "";
+                AdviceJsonItemSync adviceJsonItem = new AdviceJsonItemSync
+                {
+                    AdviceId = rm.ObservationId,
+                    Identifier = rm.Identifier,
+                    TaxonId = rm.TaxonId,
+                    TaxonFullName = taxonName,
+                    AdviceDate = rm.HabitatDate,
+                    AdviceCount = rm.AdviceCount,
+                    AdviceCity = rm.Event.LocalityName,
+                    MaleCount = rm.MaleCount,
+                    FemaleCount = rm.FemaleCount,
+                    StateEgg = false,
+                    StateLarva = false,
+                    StateImago = true,
+                    StateNymph = false,
+                    StatePupa = false,
+                    StateDead = false,
+                    Comment = rm.ObservationComment,
+                    ReportedByName = rm.AuthorName,
+                    LastEditDate = (DateTime)(rm.LastEditDate.HasValue ? rm.LastEditDate : null),
+                    DeletionDate = rm.DeletionDate,
+                    Lat = rm.Event.LatitudeDecimal,
+                    Lon = rm.Event.LongitudeDecimal,
+                    //AreaWkt = rm.Position != PositionOption.Pin ? ConvertPositionListToWkt(rm.Position, PositionList) : "",
+                    AccuracyType = rm.Event.AccuracyId,
+                    LocalityTemplateId = rm.EventId,
+                    Images = baseList.ToArray(),
+                    UserName = rm.AuthorName,
+                    IsSynced = rm.IsSynced
+                };
+
+                adviceJsonItem.GenerateItemHash();
+
+                return adviceJsonItem;
+            }
+            catch (Exception ex)
+            {
+                var dbg = ex;
+                Trace.WriteLine(ex.Message);
+                return null;
+            }
+        }
+
+        public class CNCObservationItem
+        {
+            public string Image_URL { get; set; }
+            public string Attribution { get; set; }
+            public string License_type { get; set; }
+            public decimal Latitude { get; set; }
+            public decimal Longitude { get; set; }
+            public bool Is_Obscured { get; set; }
+            public string Sighting_address { get; set; }
+            public DateTime Sighting_date { get; set; }
+            public string Timezone { get; set; }
+            public string Sighting_ID { get; set; }
+            public string User_id { get; set; }
+            public string User_name { get; set; }
+            public string Field_notes { get; set; }
+            public string Species { get; set; }
+        }
+
+        [Serializable]
         public class AdviceImageJsonItem
         {
             public string ImageName { get; set; }
@@ -915,6 +1432,116 @@ namespace Kbs.IdoWeb.Api.Controllers
         {
             public string DeviceId { get; set; }
             public string DeviceHash { get; set; }
+        }
+
+        public static string EncryptString(string text, string keyString)
+        {
+            var key = Encoding.UTF8.GetBytes(keyString);
+
+            using (var aesAlg = Aes.Create())
+            {
+                using (var encryptor = aesAlg.CreateEncryptor(key, aesAlg.IV))
+                {
+                    using (var msEncrypt = new MemoryStream())
+                    {
+                        using (var csEncrypt = new CryptoStream(msEncrypt, encryptor, CryptoStreamMode.Write))
+                        using (var swEncrypt = new StreamWriter(csEncrypt))
+                        {
+                            swEncrypt.Write(text);
+                        }
+
+                        var iv = aesAlg.IV;
+
+                        var decryptedContent = msEncrypt.ToArray();
+
+                        var result = new byte[iv.Length + decryptedContent.Length];
+
+                        Buffer.BlockCopy(iv, 0, result, 0, iv.Length);
+                        Buffer.BlockCopy(decryptedContent, 0, result, iv.Length, decryptedContent.Length);
+
+                        return Convert.ToBase64String(result);
+                    }
+                }
+            }
+        }
+
+        public static string DecryptString(string cipherText, string keyString)
+        {
+            var fullCipher = Convert.FromBase64String(cipherText);
+
+            var iv = new byte[16];
+            var cipher = new byte[16];
+
+            Buffer.BlockCopy(fullCipher, 0, iv, 0, iv.Length);
+            Buffer.BlockCopy(fullCipher, iv.Length, cipher, 0, iv.Length);
+            var key = Encoding.UTF8.GetBytes(keyString);
+
+            using (var aesAlg = Aes.Create())
+            {
+                using (var decryptor = aesAlg.CreateDecryptor(key, iv))
+                {
+                    string result;
+                    using (var msDecrypt = new MemoryStream(cipher))
+                    {
+                        using (var csDecrypt = new CryptoStream(msDecrypt, decryptor, CryptoStreamMode.Read))
+                        {
+                            using (var srDecrypt = new StreamReader(csDecrypt))
+                            {
+                                result = srDecrypt.ReadToEnd();
+                            }
+                        }
+                    }
+
+                    return result;
+                }
+            }
+        }
+
+        public List<Tk25Item> GetAllTk25()
+        {
+            try
+            {
+                using (_locContext)
+                {
+                    using (NpgsqlConnection conn = new NpgsqlConnection(_locContext.Database.GetDbConnection().ConnectionString))
+                    {
+                        DataTable dataTable = new DataTable();
+                        List<Tk25Item> dataList = new List<Tk25Item>();
+                        conn.Open();
+                        NpgsqlCommand cmd = new NpgsqlCommand(@"Select ""TkNr"", ""Wgs84CenterLat"", ""Wgs84CenterLong"" FROM ""Map"".""Tk25""", conn);
+                        NpgsqlDataReader dr = cmd.ExecuteReader();
+                        if (dr.Read())
+                        {
+                            dataTable.Load(dr);
+                            dataList = dataTable.AsEnumerable().Select(i => new Tk25Item()
+                            {
+                                Tk25Nr = i.Field<int>("TkNr"),
+                                Wgs84CenterLat = i.Field<decimal>("Wgs84CenterLat"),
+                                Wgs84CenterLong = i.Field<decimal>("Wgs84CenterLong"),
+                            }).ToList();
+                            Logger.Debug(JsonConvert.SerializeObject(dataList));
+                        }
+                        else
+                        {
+                            Console.WriteLine("Data does not exist");
+                        }
+                        dr.Close();
+                        return dataList;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                return null;
+            }
+        }
+
+        public class Tk25Item
+        {
+            public int Tk25Nr { get; set; }
+            public decimal Wgs84CenterLat { get; set; }
+            public decimal Wgs84CenterLong { get; set; }
         }
     }
 }

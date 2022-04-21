@@ -7,6 +7,7 @@ namespace Kbs.IdoWeb.Data.Public
 {
     public partial class AspNetUserDevices
     {
+        [Key]
         public Guid DeviceGuid { get; set; }
         public string UserId { get; set; }
         public string DeviceId { get; set; }

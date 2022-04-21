@@ -160,7 +160,7 @@ namespace Kbs.IdoWeb.Api.Controllers
                     .Distinct()
                     .AsNoTracking();
 
-                var images = _obsContext.Image.Where(img => img.TaxonId.HasValue).OrderBy(i => i.ImagePriority).ToList();
+                var images = _obsContext.Image.Where(img => img.TaxonId.HasValue && img.LicenseId != null && img.ImagePriority != null).OrderBy(i => i.ImagePriority).ToList();
 
                 var taxonImages = images
                     .Where(img => taxonItems.Select(tItems => tItems.TaxonId).Contains(img.TaxonId.Value))

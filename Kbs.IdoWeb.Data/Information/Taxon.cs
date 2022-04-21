@@ -66,6 +66,8 @@ namespace Kbs.IdoWeb.Data.Information
         public string DisplayLength { get; set; }
         [Column(TypeName = "jsonb")]
         public string SliderImages { get; set; }
+        [Column(TypeName = "jsonb")]
+        public string I18nNames { get; set; }
 
         [ForeignKey("ClassId")]
         [InverseProperty("InverseClass")]

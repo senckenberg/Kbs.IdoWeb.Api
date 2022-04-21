@@ -1,7 +1,10 @@
-﻿using System;
+﻿using Kbs.IdoWeb.Data.Public;
+using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Runtime.Serialization;
 
 namespace Kbs.IdoWeb.Data.Observation
 {
@@ -29,7 +32,9 @@ namespace Kbs.IdoWeb.Data.Observation
         public string ObservationComment { get; set; }
         public int? JuvenileCount { get; set; }
         public string UserId { get; set; }
+        public Guid Identifier { get; set; }
         public int ApprovalStateId { get; set; }
+        public bool IsSynced { get; set; }
         [StringLength(100)]
         public string TaxonName { get; set; }
         [StringLength(100)]
@@ -37,6 +42,8 @@ namespace Kbs.IdoWeb.Data.Observation
         public string EditorComment { get; set; }
         [Column(TypeName = "date")]
         public DateTime? LastEditDate { get; set; }
+        [Column(TypeName = "date")]
+        public DateTime? DeletionDate { get; set; }
 
         [ForeignKey("ApprovalStateId")]
         [InverseProperty("Observation")]
@@ -53,7 +60,13 @@ namespace Kbs.IdoWeb.Data.Observation
         [ForeignKey("SizeGroupId")]
         [InverseProperty("Observation")]
         public virtual SizeGroup SizeGroup { get; set; }
+        [JsonIgnore]
+        [IgnoreDataMember]
         [InverseProperty("Observation")]
         public virtual ICollection<Image> Image { get; set; }
+        [ForeignKey("UserId")]
+        public virtual AspNetUsers User { get; set; }
+
+
     }
 }
