@@ -17,6 +17,7 @@ namespace Kbs.IdoWeb.Data.Observation
         }
 
         public int ObservationId { get; set; }
+        public int? MobileAdviceId { get; set; }
         public int TaxonId { get; set; }
         public int EventId { get; set; }
         [Column(TypeName = "date")]

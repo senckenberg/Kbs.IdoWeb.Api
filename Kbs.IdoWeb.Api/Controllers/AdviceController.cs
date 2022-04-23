@@ -330,8 +330,8 @@ namespace Kbs.IdoWeb.Api.Controllers
                         adviceObservation.EventId = adviceEvent.EventId;
                         adviceObservation.UserId = _userId;
 
-                        if (adviceObservation.ApprovalStateId == null)
                         {
+                        if (adviceObservation.ApprovalStateId == null)
                             adviceObservation.ApprovalStateId = 1;
                         }
                         adviceObservation.AdviceCount = adviceObject.AdviceCount;
@@ -1115,7 +1115,11 @@ namespace Kbs.IdoWeb.Api.Controllers
         public class AdviceJsonItemSync : ISerializable
         {
             [DataMember]
-            public int ObservationId { get; set; }
+            public int GlobalAdviceId { get; set; }
+            [DataMember]
+            public int? MobileAdviceId { get; set; }
+            [DataMember]
+            public Guid Identifier { get; set; }
             [DataMember]
             public string UserName { get; set; }
             [DataMember]
@@ -1126,8 +1130,6 @@ namespace Kbs.IdoWeb.Api.Controllers
             public string TaxonFullName { get; set; }
             [DataMember]
             public DateTime? AdviceDate { get; set; }
-            [DataMember]
-            public DateTime? DeletionDate { get; set; }
             [DataMember]
             public int? AdviceCount { get; set; }
             [DataMember]
@@ -1153,6 +1155,10 @@ namespace Kbs.IdoWeb.Api.Controllers
             [DataMember]
             public string ReportedByName { get; set; }
             [DataMember]
+            public string ImageCopyright { get; set; }
+            [DataMember]
+            public string ImageLegend { get; set; }
+            [DataMember]
             public decimal? Lat { get; set; }
             [DataMember]
             public decimal? Lon { get; set; }
@@ -1165,28 +1171,30 @@ namespace Kbs.IdoWeb.Api.Controllers
             [DataMember]
             public int? LocalityTemplateId { get; set; }
             [DataMember]
+            public string Md5Checksum { get; set; }
+            [DataMember]
             public DateTime LastEditDate { get; set; }
             [DataMember]
-            public Guid Identifier { get; set; }
+            public DateTime? DeletionDate { get; set; }
             [DataMember]
-            public string Md5Checksum { get; set; }
-            public AdviceImageJsonItem[] Images { get; set; }
             public bool IsSynced { get; set; }
+            [DataMember]
+            public List<AdviceImageJsonItem> Images { get; set; }
 
             public AdviceJsonItemSync() { }
             protected AdviceJsonItemSync(SerializationInfo info, StreamingContext context)
             {
                 if (info == null)
+                {
                     throw new System.ArgumentNullException("info");
-                //name_value = (string)info.GetValue("AltName", typeof(string));
-                //ID_value = (int)info.GetValue("AltID", typeof(int));
-                ObservationId = (int)info.GetValue("ObservationId", typeof(int));
-                //infGetValueue("Id", Id);
+                }
+
+                GlobalAdviceId = (int)info.GetValue("GlobalAdviceId", typeof(int));
+                MobileAdviceId = (int)info.GetValue("MobileAdviceId", typeof(int));
+                Identifier = (Guid)info.GetValue("Identifier", typeof(Guid));
                 UserName = (string)info.GetValue("UserName", typeof(string));
-                AdviceId = (int)info.GetValue("AdviceId", typeof(int));
                 LastEditDate = (DateTime)info.GetValue("LastEditDate", typeof(DateTime));
                 DeletionDate = (DateTime?) info.GetValue("DeletionDate", typeof(DateTime?));
-                Identifier = (Guid)info.GetValue("Identifier", typeof(Guid));
                 TaxonId = (int)info.GetValue("TaxonId", typeof(int));
                 TaxonFullName = (string)info.GetValue("TaxonFullName", typeof(string));
                 AdviceDate = (DateTime)info.GetValue("AdviceDate", typeof(DateTime));
@@ -1202,36 +1210,32 @@ namespace Kbs.IdoWeb.Api.Controllers
                 StateDead = (bool)info.GetValue("StateDead", typeof(bool));
                 Comment = (string)info.GetValue("Comment", typeof(string));
                 ReportedByName = (string)info.GetValue("ReportedByName", typeof(string));
-                //infGetValueue("ReportedByUserId", ReportedByUserId);
-                //infGetValueue("ImageCopyright", ImageCopyright);
-                //infGetValueue("ImageLegend", ImageLegend);
-                //infGetValueue("UploadCode", UploadCode);
                 Lat = (decimal?)info.GetValue("Lat", typeof(decimal?));
                 Lon = (decimal?)info.GetValue("Lon", typeof(decimal?));
-                //infGetValueue("AreaWkt", AreaWkt);
-                //infGetValueue("Zoom", Zoom);
-                AccuracyType = (int)info.GetValue("AccuracyType", typeof(int));
+                AccuracyType = (int?)info.GetValue("AccuracyType", typeof(int?));
                 DeviceId = (string)info.GetValue("DeviceId", typeof(string));
                 DeviceHash = (string)info.GetValue("DeviceHash", typeof(string));
-                LocalityTemplateId = (int)info.GetValue("LocalityTemplateId", typeof(int));
+                LocalityTemplateId = (int?)info.GetValue("LocalityTemplateId", typeof(int?));
                 Md5Checksum = (string)info.GetValue("Md5Checksum", typeof(string));
-                Images = (AdviceImageJsonItem[])info.GetValue("Images", typeof(AdviceImageJsonItem[]));
+                Images = (List<AdviceImageJsonItem>)info.GetValue("Images", typeof(List<AdviceImageJsonItem>));
                 IsSynced = (bool)info.GetValue("IsSynced", typeof(bool));
             }
 
             protected virtual void GetObjectData(SerializationInfo info, StreamingContext context)
             {
-                info.AddValue("ObservationId", ObservationId);
-                //info.AddValue("Id", Id);
+                info.AddValue("GlobalAdviceId", GlobalAdviceId);
+                info.AddValue("MobileAdviceId", MobileAdviceId);
+                info.AddValue("Identifier", Identifier);
+
+                info.AddValue("LastEditDate", LastEditDate);
                 info.AddValue("UserName", UserName);
                 info.AddValue("AdviceId", AdviceId);
                 info.AddValue("LastEditDate", LastEditDate);
-                info.AddValue("Identifier", Identifier);
                 info.AddValue("TaxonId", TaxonId);
                 info.AddValue("TaxonFullName", TaxonFullName);
                 info.AddValue("AdviceDate", AdviceDate);
-                info.AddValue("AdviceCount", AdviceCount);
                 info.AddValue("AdviceCity", AdviceCity);
+                info.AddValue("AdviceCount", AdviceCount);
                 info.AddValue("MaleCount", MaleCount);
                 info.AddValue("FemaleCount", FemaleCount);
                 info.AddValue("StateEgg", StateEgg);
@@ -1242,14 +1246,8 @@ namespace Kbs.IdoWeb.Api.Controllers
                 info.AddValue("StateDead", StateDead);
                 info.AddValue("Comment", Comment);
                 info.AddValue("ReportedByName", ReportedByName);
-                //info.AddValue("ReportedByUserId", ReportedByUserId);
-                //info.AddValue("ImageCopyright", ImageCopyright);
-                //info.AddValue("ImageLegend", ImageLegend);
-                //info.AddValue("UploadCode", UploadCode);
                 info.AddValue("Lat", Lat);
                 info.AddValue("Lon", Lon);
-                //info.AddValue("AreaWkt", AreaWkt);
-                //info.AddValue("Zoom", Zoom);
                 info.AddValue("AccuracyType", AccuracyType);
                 info.AddValue("DeviceId", DeviceId);
                 info.AddValue("DeviceHash", DeviceHash);
@@ -1337,22 +1335,6 @@ namespace Kbs.IdoWeb.Api.Controllers
         {
             try
             {
-                string baseString;
-                List<AdviceImageJsonItem> baseList = new List<AdviceImageJsonItem>();
-                List<AdviceImageJsonItem> audioList = new List<AdviceImageJsonItem>();
-                //string username = _userManager.FindByIdAsync(_userId).Result.
-                /*
-                var fileHelper = new FileHelper();
-                List<MediaFileModel> selectedMedia = Database.GetMediaAsync(rm.LocalRecordId).Result;
-                string userName = Database.GetUserName();
-
-                foreach (MediaFileModel media in selectedMedia)
-                {
-                    baseString = fileHelper.GetBase64FromImagePath(media.Path);
-                    baseList.Add(new AdviceImageJsonItem(baseString, media.Path));
-                }
-                */
-
                 var tempTaxon = _infContext.Taxon.FirstOrDefault(i => i.TaxonId == (int)(rm.TaxonId));
                 if (tempTaxon == null)
                 {
@@ -1361,7 +1343,8 @@ namespace Kbs.IdoWeb.Api.Controllers
                 var taxonName = (tempTaxon != null) ? tempTaxon.TaxonName : "";
                 AdviceJsonItemSync adviceJsonItem = new AdviceJsonItemSync
                 {
-                    AdviceId = rm.ObservationId,
+                    GlobalAdviceId = rm.ObservationId,
+                    MobileAdviceId = rm.MobileAdviceId,
                     Identifier = rm.Identifier,
                     TaxonId = rm.TaxonId,
                     TaxonFullName = taxonName,
@@ -1382,13 +1365,20 @@ namespace Kbs.IdoWeb.Api.Controllers
                     DeletionDate = rm.DeletionDate,
                     Lat = rm.Event.LatitudeDecimal,
                     Lon = rm.Event.LongitudeDecimal,
-                    //AreaWkt = rm.Position != PositionOption.Pin ? ConvertPositionListToWkt(rm.Position, PositionList) : "",
                     AccuracyType = rm.Event.AccuracyId,
                     LocalityTemplateId = rm.EventId,
-                    Images = baseList.ToArray(),
+                    Images = new List<AdviceImageJsonItem>(),
                     UserName = rm.AuthorName,
                     IsSynced = rm.IsSynced
                 };
+
+                foreach(Image img in rm.Image)
+                {
+                    string imgFullPath = $@"{imgSavePath}{img.ImagePath}";
+                    byte[] imageArray = System.IO.File.ReadAllBytes(imgFullPath);
+                    AdviceImageJsonItem newImg = new AdviceImageJsonItem { ImageName = img.ImagePath, ImageBase64 = Convert.ToBase64String(imageArray) };
+                    adviceJsonItem.Images.Add(newImg);
+                }
 
                 adviceJsonItem.GenerateItemHash();
 
