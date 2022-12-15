@@ -19,6 +19,7 @@ namespace Kbs.IdoWeb.Data.Observation
         public int ObservationId { get; set; }
         public int? MobileAdviceId { get; set; }
         public int TaxonId { get; set; }
+        public Guid? TaxonGuid { get; set; }
         public int EventId { get; set; }
         [Column(TypeName = "date")]
         public DateTime HabitatDate { get; set; }
@@ -41,9 +42,9 @@ namespace Kbs.IdoWeb.Data.Observation
         [StringLength(100)]
         public string AuthorName { get; set; }
         public string EditorComment { get; set; }
-        [Column(TypeName = "date")]
+        [Column(TypeName = "DateTime")]
         public DateTime? LastEditDate { get; set; }
-        [Column(TypeName = "date")]
+        [Column(TypeName = "DateTime")]
         public DateTime? DeletionDate { get; set; }
 
         [ForeignKey("ApprovalStateId")]

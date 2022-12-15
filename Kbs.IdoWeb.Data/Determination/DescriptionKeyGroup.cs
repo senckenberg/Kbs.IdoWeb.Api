@@ -20,6 +20,7 @@ namespace Kbs.IdoWeb.Data.Determination
         public string DescriptionKeyGroupDataType { get; set; }
         [Column(TypeName = "jsonb")]
         public string LocalisationJson { get; set; }
+        public string KeyGroupDescription { get; set; }
         public int? ParentDescriptionKeyGroupId { get; set; }
         [Column(TypeName = "jsonb")]
         public string DescriptionKeyGroupType { get; set; }

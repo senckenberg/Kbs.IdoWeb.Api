@@ -132,5 +132,6 @@ namespace Kbs.IdoWeb.Data.Information
         public virtual ICollection<Taxon> InverseSubphylum { get; set; }
         [InverseProperty("Taxon")]
         public virtual ICollection<TaxonToRegion> TaxonToRegion { get; set; }
+        public Guid? Identifier { get; set; }
     }
 }

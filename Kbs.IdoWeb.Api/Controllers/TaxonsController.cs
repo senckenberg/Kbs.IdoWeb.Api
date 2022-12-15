@@ -216,7 +216,8 @@ namespace Kbs.IdoWeb.Api.Controllers
                                 taxItem.taxonItem.DistributionEurope,
                                 taxItem.taxonItem.TaxonDistribution,
                                 taxItem.taxonItem.TaxonBiotopeAndLifestyle,
-                                taxItem.taxonItem.SliderImages
+                                taxItem.taxonItem.SliderImages,
+                                I18nNames = !String.IsNullOrEmpty(taxItem.taxonItem.I18nNames)?taxItem.taxonItem.I18nNames:""
                             },
                             Synonyms = taxItem.taxonItem.Synonyms != null? JsonConvert.DeserializeObject(taxItem.taxonItem.Synonyms): null
                         },
