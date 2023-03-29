@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
@@ -17,6 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
@@ -25,6 +27,7 @@ using System.Security.Cryptography;
 using System.Security.Permissions;
 using System.Text;
 using System.Threading.Tasks;
+using static Kbs.IdoWeb.Api.Controllers.AdviceController;
 
 namespace Kbs.IdoWeb.Api.Controllers
 {
@@ -40,10 +43,10 @@ namespace Kbs.IdoWeb.Api.Controllers
         private readonly ApplicationSettings _appSettings;
         private readonly List<int> positiveApprovalStates = new List<int>(new int[] { 3, 5, 6 });
         private string _userId;
-        private string imgSavePath_dev = "./wordpress/wp-content/uploads/user_uploads/";
-        private string imgSavePath_general_dev = "./wordpress/wp-content/uploads/";
-        private string imgSavePath_general = "~/./wordpress/wp-content/uploads/";
-        private string imgSavePath = "~/./wordpress/wp-content/uploads/user_uploads/";
+        private string imgSavePath_dev = "../public_html/wp-content/uploads/user_uploads/";
+        private string imgSavePath_general_dev = "../public_html/wp-content/uploads/";
+        private string imgSavePath_general = "../public_html/wp-content/uploads/";
+        private string imgSavePath = "../public_html/wp-content/uploads/user_uploads/";
         private string imgPublicUrl = "https://bodentierhochvier.de/wp-content/uploads/";
         private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
         private static List<Observation> observationListByUser;
@@ -198,14 +201,25 @@ namespace Kbs.IdoWeb.Api.Controllers
         {
             try
             {
+                Logger.Info(JsonConvert.SerializeObject(syncRequest));
                 //_userId = User.Claims.First(i => i.Type == "UserId").Value;
                 AspNetUserDevices devInfo = new AspNetUserDevices();
-                string userId = _idoContext.AspNetUserDevices.Where(dev => dev.DeviceId == syncRequest.DeviceId && dev.DeviceHash == syncRequest.DeviceHash).Select(dev => dev.UserId).FirstOrDefault();
-                ApplicationUser _user = _userManager.Users.FirstOrDefault(u => u.Id.Equals(userId));
+                List<string> userIdList = _idoContext.AspNetUserDevices.Where(dev => dev.DeviceId == syncRequest.DeviceId && dev.DeviceHash == syncRequest.DeviceHash).Select(dev => dev.UserId).ToList();
+                ApplicationUser _user = null;
+                foreach (string userId in userIdList)
+                {
+                    _user = _userManager.Users.FirstOrDefault(u => userId.Equals(u.Id) && u.UserName.Equals(syncRequest.UserName));
+                    if (_user != null)
+                    {
+                        break;
+                    }
+                }
 
                 if (_user != null)
                 {
-                    observationListByUser = _obsContext.Observation.Include(o => o.Image).Where(i => i.UserId.Equals(_user.Id))
+                    observationListByUser = _obsContext.Observation
+                        .Where(i => i.UserId.Equals(_user.Id))
+                        .Include(o => o.Image)
                         .Include(i => i.Image)
                         .Include(i => i.Event)
                         .ToList();
@@ -216,131 +230,209 @@ namespace Kbs.IdoWeb.Api.Controllers
                     List<AdviceJsonItemSync> toBeDeletedList = new List<AdviceJsonItemSync>();
                     List<AdviceJsonItemSync> toBeUpdatedList = new List<AdviceJsonItemSync>();
 
-                    foreach (AdviceJsonItemSync adviceObject in syncRequest.AdviceList)
+                    if (syncRequest.AdviceList.Count > 0)
                     {
-                        if (adviceObject != null)
+                        foreach (AdviceJsonItemSync adviceObject in syncRequest.AdviceList)
                         {
-                            adviceObject.IsSynced = true;
-                            AdviceJsonItemSync ajiList_server_item = ajiList_server.Where(i => i != null).FirstOrDefault(i => i.Identifier.Equals(adviceObject.Identifier));
-
-                            //matching advice identfiers
-                            if (ajiList_server_item != null)
+                            if (adviceObject != null)
                             {
-                                //advice previously synced, now to be deleted
-                                if (adviceObject.DeletionDate != null && ajiList_server_item.DeletionDate == null)
-                                {
-                                    //DeleteObservationAsync(_obsContext.Observation.FirstOrDefault(i => i.ObservationId.Equals(ajiList_server_item.ObservationId)));
-                                    toBeDeletedList.Add(ajiList_server_item);
-                                }
+                                adviceObject.IsSynced = true;
+                                AdviceJsonItemSync ajiList_server_item = ajiList_server.Where(i => i != null).FirstOrDefault(i => i.Identifier.Equals(adviceObject.Identifier));
 
-                                //different property values?                            
-                                if (!ajiList_server_item.Md5Checksum.Equals(adviceObject.Md5Checksum))
+                                //matching advice identfiers
+                                if (ajiList_server_item != null)
                                 {
-                                    //compare last edit
-                                    if (adviceObject.LastEditDate != null && ajiList_server_item.LastEditDate != null)
+                                    //advice previously synced, now to be deleted
+                                    if (adviceObject.DeletionDate != null && ajiList_server_item.DeletionDate == null)
                                     {
-                                        var lastEditCompare = ((DateTime)adviceObject.LastEditDate).CompareTo((DateTime)ajiList_server_item.LastEditDate);
+                                        //DeleteObservationAsync(_obsContext.Observation.FirstOrDefault(i => i.ObservationId.Equals(ajiList_server_item.ObservationId)));
+                                        toBeDeletedList.Add(ajiList_server_item);
+                                    }
 
-                                        //server newer
-                                        if (lastEditCompare < 0)
+                                    //different property values?                            
+                                    if (!ajiList_server_item.Md5Checksum.Equals(adviceObject.Md5Checksum))
+                                    {
+                                        //prevent null values for taxa from mobile
+                                        if ((adviceObject.TaxonGuid != null && !Guid.Empty.Equals(adviceObject.TaxonGuid)))
                                         {
-                                            /*
-                                            if (ajiList_server_item.MobileAdviceId == null || ajiList_server_item.MobileAdviceId < 1 || ajiList_server_item.MobileAdviceId != adviceObject.MobileAdviceId)
+                                            //compare last edit
+                                            if (adviceObject.LastEditDate != null && ajiList_server_item.LastEditDate != null)
                                             {
-                                                Observation obs = _obsContext.Observation.FirstOrDefault(o => o.Identifier.Equals(adviceObject.Identifier));
-                                                obs.MobileAdviceId = adviceObject.MobileAdviceId;
-                                                _obsContext.Update(obs);
+                                                var lastEditCompare = ((DateTime)adviceObject.LastEditDate).CompareTo((DateTime)ajiList_server_item.LastEditDate);
+
+                                                //server newer
+                                                if (lastEditCompare < 0)
+                                                {
+                                                    /*
+                                                    if (ajiList_server_item.MobileAdviceId == null || ajiList_server_item.MobileAdviceId < 1 || ajiList_server_item.MobileAdviceId != adviceObject.MobileAdviceId)
+                                                    {
+                                                        Observation obs = _obsContext.Observation.FirstOrDefault(o => o.Identifier.Equals(adviceObject.Identifier));
+                                                        obs.MobileAdviceId = adviceObject.MobileAdviceId;
+                                                        _obsContext.Update(obs);
+                                                    }
+                                                    else
+                                                    {
+
+                                                    }
+                                                    ajiList_server_item.MobileAdviceId = adviceObject.MobileAdviceId;
+                                                    syncedresultList.Add(ajiList_server_item);
+                                                    */
+                                                }
+                                                //equal
+                                                else if (lastEditCompare == 0)
+                                                {
+                                                    //check for possible missing fields
+                                                    /*
+                                                    if (adviceObject.TaxonGuid == null && ajiList_server_item.TaxonGuid != null)
+                                                    {
+                                                        syncedresultList.Add(ajiList_server_item);
+                                                    }
+                                                    */
+                                                    //something went wrong during last sync
+                                                    //missing taxonguid? event updated?
+
+                                                    //Mobile AdviceId not updated?
+                                                    Logger.Warn($@"Last sync warning for advices {ajiList_server_item.Identifier}, {ajiList_server_item.GlobalAdviceId}");
+                                                    Logger.Warn(ajiList_server_item);
+                                                    Logger.Warn(adviceObject);
+                                                    toBeUpdatedList.Add(ajiList_server_item);
+                                                }
+                                                //mobile newer
+                                                else
+                                                {
+                                                    /*
+                                                    if (adviceObject.GlobalAdviceId != ajiList_server_item.GlobalAdviceId)
+                                                    {
+                                                        adviceObject.GlobalAdviceId = ajiList_server_item.GlobalAdviceId;
+                                                    }
+                                                    syncedresultList.Add(adviceObject);
+                                                    */
+                                                    AdviceComplex ac = ConvertToAdviceComplexFromSync(adviceObject, _user.Id);
+                                                    Logger.Info($@"Saving Advice Async {JsonConvert.SerializeObject(adviceObject)}");
+                                                    SaveAdviceComplexAsync(ac, false);
+                                                }
                                             }
                                             else
                                             {
+                                                Logger.Warn("Syncing Error");
+                                                Logger.Warn(ajiList_server_item);
+                                                Logger.Warn(adviceObject);
 
-                                            }
-                                            ajiList_server_item.MobileAdviceId = adviceObject.MobileAdviceId;
-                                            syncedresultList.Add(ajiList_server_item);
-                                            */
-                                        }
-                                        //equal
-                                        else if (lastEditCompare == 0)
-                                        {
-                                            //check for possible missing fields
-                                            /*
-                                            if (adviceObject.TaxonGuid == null && ajiList_server_item.TaxonGuid != null)
-                                            {
+                                                /**
+                                                ajiList_server_item.MobileAdviceId = adviceObject.MobileAdviceId;
                                                 syncedresultList.Add(ajiList_server_item);
+                                                */
                                             }
-                                            */
-                                            //something went wrong during last sync
-                                            //missing taxonguid? event updated?
 
-                                            //Mobile AdviceId not updated?
-                                            Logger.Warn($@"Last sync warning for advices {ajiList_server_item.Identifier}, {ajiList_server_item.GlobalAdviceId}");
-                                            Logger.Warn(ajiList_server_item);
-                                            Logger.Warn(adviceObject);
-                                            toBeUpdatedList.Add(ajiList_server_item);
                                         }
-                                        //mobile newer
+                                    }
+                                    else if (ajiList_server_item.Images.Count != adviceObject.Images.Count)
+                                    {
+                                        Logger.Info("ajiList_server_item.Images.Count != adviceObject.Images.Count");
+                                        if (adviceObject.Images != null)
+                                        {
+                                            int observationId = _obsContext.Observation.FirstOrDefault(o => o.Identifier == ajiList_server_item.Identifier).ObservationId;
+
+                                            Logger.Info("ac.Images != null");
+                                            foreach (AdviceImageJsonItem img_in in adviceObject.Images)
+                                            {
+                                                Logger.Info(JsonConvert.SerializeObject(img_in));
+                                                try
+                                                {
+                                                    if (ajiList_server_item.Images != null)
+                                                    {
+                                                        //check if updated image
+                                                        AdviceImageJsonItem img_tbu = ajiList_server_item.Images.FirstOrDefault(i => i.ImageName.Contains(img_in.ImageName));
+                                                        if (img_tbu != null)
+                                                        {
+                                                            string img_tbu_FullPath = Path.Combine(imgSavePath, img_in.ImageName);
+                                                            byte[] img_in_imageBytes = Convert.FromBase64String(img_in.ImageBase64);
+                                                            try
+                                                            {
+                                                                byte[] img_tbu_imageArray = System.IO.File.ReadAllBytes(img_tbu_FullPath);
+                                                                string img_tbu_base64 = Convert.ToBase64String(img_tbu_imageArray);
+                                                                if (img_tbu_base64 != img_in.ImageBase64)
+                                                                {
+
+                                                                    System.IO.File.WriteAllBytes(img_tbu_FullPath, img_in_imageBytes);
+                                                                }
+                                                            }
+                                                            catch (Exception ex)
+                                                            {
+                                                                //existing foto corrupt
+                                                                Logger.Error(ex);
+                                                                System.IO.File.Delete(img_tbu_FullPath);
+                                                                System.IO.File.WriteAllBytes(img_tbu_FullPath, img_in_imageBytes);
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            SaveNewImage(img_in, ajiList_server_item, _user.Id, observationId);
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        SaveNewImage(img_in, ajiList_server_item, _user.Id, observationId);
+                                                    }
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    Logger.Error(ex);
+                                                }
+                                            }
+                                        }
                                         else
                                         {
-                                            /*
-                                            if (adviceObject.GlobalAdviceId != ajiList_server_item.GlobalAdviceId)
-                                            {
-                                                adviceObject.GlobalAdviceId = ajiList_server_item.GlobalAdviceId;
-                                            }
-                                            syncedresultList.Add(adviceObject);
-                                            */
-                                            AdviceComplex ac = ConvertToAdviceComplexFromSync(adviceObject, _user.Id);
-                                            SaveAdviceComplexAsync(ac, false);
+                                            Logger.Warn("ac.Images != null");
                                         }
-                                    }
-                                    else
-                                    {
-                                        Logger.Warn("Syncing Error");
-                                        Logger.Warn(ajiList_server_item);
-                                        Logger.Warn(adviceObject);
-
-                                        /**
-                                        ajiList_server_item.MobileAdviceId = adviceObject.MobileAdviceId;
-                                        syncedresultList.Add(ajiList_server_item);
-                                        */
+                                        toBeUpdatedList.Add(ajiList_server_item);
                                     }
                                 }
+                                else
+                                {
+                                    //New mobile Advice Add
+                                    AdviceComplex ac = ConvertToAdviceComplexFromSync(adviceObject, _user.Id);
+                                    Logger.Info($@"Saving Advice Async {JsonConvert.SerializeObject(adviceObject)}");
+                                    SaveAdviceComplexAsync(ac, true);
+                                }
                             }
-                            else
+
+                        }
+
+
+                        foreach (AdviceJsonItemSync deleteAdvice in toBeDeletedList)
+                        {
+                            Observation obs = _obsContext.Observation.FirstOrDefault(o => o.Identifier == deleteAdvice.Identifier);
+                            if (obs != null)
                             {
-                                //New mobile Advice Add
-                                AdviceComplex ac = ConvertToAdviceComplexFromSync(adviceObject, _user.Id);
-                                SaveAdviceComplexAsync(ac, true);
+                                obs.DeletionDate = deleteAdvice.DeletionDate;
+                                _obsContext.Observation.Update(obs);
+                                _obsContext.SaveChanges();
                             }
                         }
 
-                    }
-
-
-                    foreach (AdviceJsonItemSync deleteAdvice in toBeDeletedList)
-                    {
-                        Observation obs = _obsContext.Observation.FirstOrDefault(o => o.Identifier == deleteAdvice.Identifier);
-                        if (obs != null)
+                        foreach (AdviceJsonItemSync updateAdvice in toBeUpdatedList)
                         {
-                            obs.DeletionDate = deleteAdvice.DeletionDate;
-                            _obsContext.Observation.Update(obs);
-                            _obsContext.SaveChanges();
+                            Observation obs = _obsContext.Observation.FirstOrDefault(o => o.Identifier == updateAdvice.Identifier);
+                            if (obs != null)
+                            {
+                                obs.MobileAdviceId = obs.ObservationId;
+                                _obsContext.Observation.Update(obs);
+                                _obsContext.SaveChanges();
+                            }
+
                         }
                     }
 
-                    foreach (AdviceJsonItemSync updateAdvice in toBeUpdatedList)
-                    {
-                        Observation obs = _obsContext.Observation.FirstOrDefault(o => o.Identifier == updateAdvice.Identifier);
-                        if (obs != null)
-                        {
-                            obs.MobileAdviceId = obs.ObservationId;
-                            _obsContext.Observation.Update(obs);
-                            _obsContext.SaveChanges();
-                        }
 
-                    }
+                    //List<AdviceJsonItemSync> syncedresultList = observationListByUser.Select(i => ConvertToJsonForSync(i, _user.UserName)).ToList();
+                    List<AdviceJsonItemSync> syncedresultList = _obsContext.Observation
+                        .Where(i => i.UserId.Equals(_user.Id))
+                        .Include(o => o.Image)
+                        .Include(i => i.Image)
+                        .Include(i => i.Event)
+                        .Select(i => ConvertToJsonForSync(i, _user.UserName)).ToList();
 
-                    List<AdviceJsonItemSync> syncedresultList = observationListByUser.Select(i => ConvertToJsonForSync(i, _user.UserName)).ToList();
-                    
                     try
                     {
                         foreach (AdviceJsonItemSync ajis in syncedresultList)
@@ -357,7 +449,7 @@ namespace Kbs.IdoWeb.Api.Controllers
                     }
                     catch (Exception ex)
                     {
-                        Trace.WriteLine(ex);
+                        Logger.Error(ex);
                     }
 
                     return Ok(new { succeeded = true, errors = new string[] { }, AdviceList = syncedresultList });
@@ -369,6 +461,7 @@ namespace Kbs.IdoWeb.Api.Controllers
             }
             catch (Exception e)
             {
+                Logger.Error(e);
                 return BadRequest(JsonConvert.SerializeObject(e.Message));
             }
         }
@@ -377,8 +470,11 @@ namespace Kbs.IdoWeb.Api.Controllers
         {
             try
             {
+                Logger.Info("SaveAdviceComplexAsync");
+                Logger.Info(JsonConvert.SerializeObject(ac));
                 if (doInsert)
                 {
+                    Logger.Info("DoInsert");
                     //AdviceComplex ac = ConvertToAdviceComplexFromSync(adviceObject);
                     _obsContext.Event.Add(ac.Ev);
                     _obsContext.SaveChanges();
@@ -425,6 +521,7 @@ namespace Kbs.IdoWeb.Api.Controllers
                 }
                 else
                 {
+                    Logger.Info("DontInsert");
                     Observation obs_tbu = _obsContext.Observation.Include(o => o.Event).Include(i => i.Image).FirstOrDefault(i => i.Identifier.Equals(ac.Obs.Identifier));
                     //obs_tbu.ObservationId = ac.Obs.ObservationId;
                     if (obs_tbu.MobileAdviceId == null || obs_tbu.MobileAdviceId != obs_tbu.ObservationId)
@@ -433,15 +530,16 @@ namespace Kbs.IdoWeb.Api.Controllers
                     }
                     obs_tbu.TaxonId = ac.Obs.TaxonId;
                     obs_tbu.TaxonGuid = ac.Obs.TaxonGuid;
-                    obs_tbu.HabitatDate = (DateTime)ac.Obs.HabitatDate;
-                    obs_tbu.AdviceCount = (int)ac.Obs.AdviceCount;
-                    obs_tbu.MaleCount = (int)ac.Obs.MaleCount;
-                    obs_tbu.FemaleCount = (int)ac.Obs.FemaleCount;
+                    obs_tbu.TaxonName = ac.Obs.TaxonName;
+                    obs_tbu.HabitatDate = ac.Obs.HabitatDate;
+                    obs_tbu.AdviceCount = ac.Obs.AdviceCount;
+                    obs_tbu.MaleCount = ac.Obs.MaleCount;
+                    obs_tbu.FemaleCount = ac.Obs.FemaleCount;
                     obs_tbu.AuthorName = ac.Obs.AuthorName;
                     obs_tbu.LastEditDate = TruncateDateTime(ac.Obs.LastEditDate, TimeSpan.FromSeconds(1));
                     obs_tbu.DeletionDate = ac.Obs.DeletionDate;
                     obs_tbu.IsSynced = true;
-                    obs_tbu.DiagnosisTypeId= ac.Obs.DiagnosisTypeId;
+                    obs_tbu.DiagnosisTypeId = ac.Obs.DiagnosisTypeId;
                     obs_tbu.ApprovalStateId = ac.Obs.ApprovalStateId;
                     obs_tbu.ObservationComment = ac.Obs.ObservationComment;
                     //obs_tbu.IsEditable = true;
@@ -486,12 +584,17 @@ namespace Kbs.IdoWeb.Api.Controllers
                     }
 
                     _obsContext.Observation.Update(obs_tbu);
+                    Logger.Info("_obsContext.Observation.Update(obs_tbu)");
                     _obsContext.SaveChanges();
+                    Logger.Info("_obsContext.SaveChanges()");
+
 
                     if (ac.Images != null)
                     {
+                        Logger.Info("ac.Images != null");
                         foreach (AdviceImageJsonItem img_in in ac.Images)
                         {
+                            Logger.Info(JsonConvert.SerializeObject(img_in));
                             try
                             {
                                 if (obs_tbu.Image != null)
@@ -500,13 +603,23 @@ namespace Kbs.IdoWeb.Api.Controllers
                                     Image img_tbu = obs_tbu.Image.FirstOrDefault(i => i.ImagePath.Contains(img_in.ImageName));
                                     if (img_tbu != null)
                                     {
-                                        string img_tbu_FullPath = Path.Combine(imgSavePath_general, img_in.ImageName);
-                                        byte[] img_tbu_imageArray = System.IO.File.ReadAllBytes(img_tbu_FullPath);
-                                        string img_tbu_base64 = Convert.ToBase64String(img_tbu_imageArray);
-                                        //foto content update
-                                        if (img_tbu_base64 != img_in.ImageBase64)
+                                        string img_tbu_FullPath = Path.Combine(imgSavePath, img_in.ImageName);
+                                        byte[] img_in_imageBytes = Convert.FromBase64String(img_in.ImageBase64);
+                                        try
                                         {
-                                            byte[] img_in_imageBytes = Convert.FromBase64String(img_in.ImageBase64);
+                                            byte[] img_tbu_imageArray = System.IO.File.ReadAllBytes(img_tbu_FullPath);
+                                            string img_tbu_base64 = Convert.ToBase64String(img_tbu_imageArray);
+                                            if (img_tbu_base64 != img_in.ImageBase64)
+                                            {
+
+                                                System.IO.File.WriteAllBytes(img_tbu_FullPath, img_in_imageBytes);
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            //existing foto corrupt
+                                            Logger.Error(ex);
+                                            System.IO.File.Delete(img_tbu_FullPath);
                                             System.IO.File.WriteAllBytes(img_tbu_FullPath, img_in_imageBytes);
                                         }
                                     }
@@ -525,7 +638,10 @@ namespace Kbs.IdoWeb.Api.Controllers
                                 Logger.Error(ex);
                             }
                         }
-
+                    }
+                    else
+                    {
+                        Logger.Warn("ac.Images != null");
                     }
                 }
 
@@ -533,7 +649,7 @@ namespace Kbs.IdoWeb.Api.Controllers
             catch (Exception ex)
             {
                 //adviceObject.DeletionDate = DateTime.Now;
-                Trace.WriteLine(ex);
+                Logger.Error(ex);
                 var dbg4 = ex;
             }
         }
@@ -771,15 +887,31 @@ namespace Kbs.IdoWeb.Api.Controllers
                     ApplicationUser _user = _userManager.Users.First(u => u.Id == _userId);
                     var user = await _userManager.FindByIdAsync(_userId);
                     var roles = await _userManager.GetRolesAsync(user);
-                    if (roles.Contains("Admin"))
-                    {
-                        return Ok(JsonConvert.SerializeObject(_obsContext.Observation.Include(o => o.Event).Include(o => o.Image).AsNoTracking().Where(i => i.ObservationId == observationId).AsNoTracking()));
-                    }
-                    else
-                    {
-                        return Ok(JsonConvert.SerializeObject(_obsContext.Observation.Include(o => o.Event).Include(o => o.Image).AsNoTracking().Where(i => i.UserId == _userId && i.ObservationId == observationId).AsNoTracking()));
-                    }
 
+                    Observation obs = new Observation();
+                    List<Image> imageList = new List<Image>();
+
+                    try
+                    {
+
+                        if (roles.Contains("Admin"))
+                        {
+                            obs = _obsContext.Observation.Include(o => o.Event).AsNoTracking().Include(i => i.Image).AsNoTracking().FirstOrDefault(i => i.ObservationId == observationId);
+                        }
+                        else
+                        {
+                            obs = _obsContext.Observation.Include(o => o.Event).AsNoTracking().Include(i => i.Image).AsNoTracking().FirstOrDefault(i => i.UserId == _userId && i.ObservationId == observationId);
+                        }
+
+                        //imageList = _obsContext.Image.Where(i => i.ObservationId == observationId).AsNoTracking().ToList();
+                        //obs.Image = imageList;
+                        Logger.Info(JsonConvert.SerializeObject(obs));
+                        return Ok(JsonConvert.SerializeObject(obs));
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error(ex);
+                    }
                 }
                 return BadRequest(JsonConvert.SerializeObject(null));
 
@@ -815,7 +947,7 @@ namespace Kbs.IdoWeb.Api.Controllers
                         Longitude = obs.User.DataRestrictionId.Equals(1) ? tk25List.FirstOrDefault(t => t.Tk25Nr == obs.Event.TkNr).Wgs84CenterLong : (decimal)obs.Event.LongitudeDecimal,
                         Is_Obscured = obs.User != null ? obs.User.DataRestrictionId.Equals(1) : false,
                         Sighting_address = obs.Event != null ? obs.Event.LocalityName : null,
-                        Sighting_date = obs.User.DataRestrictionId.Equals(1) ? DateTime.Parse($@"01-01-{obs.HabitatDate.ToString("yyyy")}") : obs.HabitatDate,
+                        Sighting_date = (DateTime)(obs.User.DataRestrictionId.Equals(1) ? DateTime.Parse($@"01-01-{obs.HabitatDate.Value.Year.ToString()}") : obs.HabitatDate),
                         Field_notes = obs.Event != null ? $@"{obs.Event.HabitatDescription}; {obs.ObservationComment}" : null,
                         Timezone = TimeZoneInfo.FindSystemTimeZoneById("CET").StandardName,
                         Sighting_ID = obs.ObservationId.ToString(),
@@ -1183,9 +1315,19 @@ namespace Kbs.IdoWeb.Api.Controllers
                     oldObs.LocalityTypeId = requestData.LocalityTypeId;
                     oldObs.ObservationComment = requestData.ObservationComment;
                     oldObs.DiagnosisTypeId = requestData.DiagnosisTypeId;
+                    oldObs.LastEditDate = DateTime.UtcNow;
                     //disabled due to kendo bug with date - 1 day
                     //oldObs.HabitatDate = requestData.HabitatDate;
-                    oldObs.TaxonId = requestData.TaxonId;
+                    if (requestData.TaxonId != null && requestData.TaxonId > 0)
+                    {
+                        oldObs.TaxonId = requestData.TaxonId;
+                        Taxon tempTax = _infContext.Taxon.FirstOrDefault(i => i.TaxonId == requestData.TaxonId);
+                        if (tempTax != null)
+                        {
+                            oldObs.TaxonName = tempTax.TaxonName;
+                            oldObs.TaxonGuid = tempTax.Identifier;
+                        }
+                    }
                     oldObs.SizeGroupId = requestData.SizeGroupId;
                     oldObs.ApprovalStateId = requestData.ApprovalStateId;
 
@@ -1632,11 +1774,11 @@ namespace Kbs.IdoWeb.Api.Controllers
             return sb.ToString();
         }
 
-
         public class SyncRequest
         {
             public string DeviceId { get; set; }
             public string DeviceHash { get; set; }
+            public string UserName { get; set; }
             public List<AdviceJsonItemSync> AdviceList { get; set; }
         }
 
@@ -1648,11 +1790,15 @@ namespace Kbs.IdoWeb.Api.Controllers
                 if (rm.TaxonId > 0)
                 {
                     tempTaxon = _infContext.Taxon.FirstOrDefault(i => i.TaxonId == (int)(rm.TaxonId));
-                    if (tempTaxon == null)
-                    {
-                        tempTaxon = _infContext.Taxon.FirstOrDefault(i => i.TaxonName == rm.TaxonName);
-                    }
                     var taxonName = (tempTaxon != null) ? tempTaxon.TaxonName : "";
+                }
+                else if (rm.TaxonGuid != null && !Guid.Empty.Equals(rm.TaxonGuid))
+                {
+                    tempTaxon = _infContext.Taxon.FirstOrDefault(i => i.Identifier == rm.TaxonGuid);
+                }
+                else if (!String.IsNullOrEmpty(rm.TaxonName))
+                {
+                    tempTaxon = _infContext.Taxon.FirstOrDefault(i => i.TaxonName == rm.TaxonName);
                 }
                 else
                 {
@@ -1713,11 +1859,13 @@ namespace Kbs.IdoWeb.Api.Controllers
                 //adviceJsonItem.GenerateItemHash();
 
                 return adviceJsonItem;
+
             }
             catch (Exception ex)
             {
                 var dbg = ex;
-                Trace.WriteLine(ex.Message);
+                Logger.Info(JsonConvert.SerializeObject(rm));
+                Logger.Error(ex.Message);
                 return null;
             }
         }
@@ -1737,7 +1885,17 @@ namespace Kbs.IdoWeb.Api.Controllers
         {
             try
             {
-                var tempTaxon = _infContext.Taxon.FirstOrDefault(i => i.TaxonId == (int)(ajis.TaxonId));
+                Taxon tempTaxon = new Taxon();
+
+                if (ajis.TaxonGuid != null && !Guid.Empty.Equals(ajis.TaxonGuid))
+                {
+                    tempTaxon = _infContext.Taxon.FirstOrDefault(i => i.Identifier == ajis.TaxonGuid);
+                }
+                else if (ajis.TaxonId != null)
+                {
+                    tempTaxon = _infContext.Taxon.FirstOrDefault(i => i.TaxonId == (int)(ajis.TaxonId));
+                }
+
                 if (tempTaxon == null)
                 {
                     tempTaxon = _infContext.Taxon.FirstOrDefault(i => i.TaxonName == ajis.TaxonFullName);
@@ -1752,16 +1910,20 @@ namespace Kbs.IdoWeb.Api.Controllers
 
                 AdviceComplex ac = new AdviceComplex();
 
+                Logger.Info("HUSSA!!!");
+                Logger.Info(ajis.Lon);
+                Logger.Info(Decimal.Parse(ajis.Lon, CultureInfo.InvariantCulture));
+
                 Event ev = new Event
                 {
-                    LatitudeDecimal = Decimal.Parse(ajis.Lat),
-                    LongitudeDecimal = Decimal.Parse(ajis.Lon),
+                    LatitudeDecimal = Decimal.Parse(ajis.Lat, CultureInfo.InvariantCulture),
+                    LongitudeDecimal = Decimal.Parse(ajis.Lon, CultureInfo.InvariantCulture),
                     LocalityName = ajis.AdviceCity,
                     AccuracyId = ajis.AccuracyTypeId,
                     UserId = reportedByUserId,
                     AuthorName = ajis.ReportedByName,
                     HabitatDescription = ajis.HabitatDescriptionForEvent,
-                    TkNr = GetTk25Id(Decimal.Parse(ajis.Lat), Decimal.Parse(ajis.Lon)).Result
+                    TkNr = GetTk25Id(Decimal.Parse(ajis.Lat, CultureInfo.InvariantCulture), Decimal.Parse(ajis.Lon, CultureInfo.InvariantCulture)).Result
                 };
 
                 ac.Ev = ev;
@@ -1772,13 +1934,13 @@ namespace Kbs.IdoWeb.Api.Controllers
                     TaxonId = tempTaxon.TaxonId,
                     TaxonName = tempTaxon.TaxonName,
                     TaxonGuid = tempTaxon.Identifier,
-                    HabitatDate = (DateTime)ajis.AdviceDate,
+                    HabitatDate = ajis.AdviceDate,
                     AdviceCount = ajis.AdviceCount,
                     MaleCount = ajis.MaleCount,
                     FemaleCount = ajis.FemaleCount,
                     ObservationComment = ajis.Comment,
                     AuthorName = ajis.ReportedByName,
-                    DiagnosisTypeId = ajis.DiagnosisTypeId,
+                    DiagnosisTypeId = ajis.DiagnosisTypeId > 0 ? ajis.DiagnosisTypeId : 1,
                     LastEditDate = ajis.LastEditDate,
                     DeletionDate = ajis.DeletionDate,
                     IsSynced = ajis.IsSynced,
@@ -1804,7 +1966,7 @@ namespace Kbs.IdoWeb.Api.Controllers
             catch (Exception ex)
             {
                 var dbg = ex;
-                Trace.WriteLine(ex.Message);
+                Logger.Error(ex.Message);
                 return null;
             }
         }
@@ -1960,7 +2122,7 @@ namespace Kbs.IdoWeb.Api.Controllers
                                 Wgs84CenterLat = i.Field<decimal>("Wgs84CenterLat"),
                                 Wgs84CenterLong = i.Field<decimal>("Wgs84CenterLong"),
                             }).ToList();
-                            Logger.Debug(JsonConvert.SerializeObject(dataList));
+                            Logger.Info(JsonConvert.SerializeObject(dataList));
                         }
                         else
                         {
@@ -1982,9 +2144,17 @@ namespace Kbs.IdoWeb.Api.Controllers
         {
             try
             {
+                Logger.Info("SaveNewImage");
                 byte[] imageBytes = Convert.FromBase64String(img_in.ImageBase64);
                 string filename = Path.Combine(imgSavePath, img_in.ImageName);
-                System.IO.File.WriteAllBytes(filename, imageBytes);
+                try
+                {
+                    System.IO.File.WriteAllBytes(filename, imageBytes);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(ex);
+                }
 
                 //Method to save images @bodentierhochvier.de / wordpress
                 //--> imgName 
@@ -2000,6 +2170,45 @@ namespace Kbs.IdoWeb.Api.Controllers
                 img_new.TaxonName = obs.TaxonName;
                 img_new.TaxonId = obs.TaxonId;
                 img_new.UserId = obs.UserId;
+                _obsContext.Add(img_new);
+                _obsContext.SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+            }
+        }
+
+        private void SaveNewImage(AdviceImageJsonItem img_in, AdviceJsonItemSync obs, string userId, int observationId)
+        {
+            try
+            {
+                Logger.Info("SaveNewImage");
+                byte[] imageBytes = Convert.FromBase64String(img_in.ImageBase64);
+                string filename = Path.Combine(imgSavePath, img_in.ImageName);
+                try
+                {
+                    System.IO.File.WriteAllBytes(filename, imageBytes);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(ex);
+                }
+
+                //Method to save images @bodentierhochvier.de / wordpress
+                //--> imgName 
+                Image img_new = new Image();
+                img_new.ImagePath = "user_uploads/" + img_in.ImageName;
+                //img_new.CmsId = img.CmsId;
+                img_new.ObservationId = observationId;
+                img_new.Description = obs.ImageLegend;
+                //img_new.CopyrightText = img.CopyrightText;
+                img_new.LicenseId = 1;
+                img_new.UserId = _userId;
+                img_new.Author = obs.ReportedByName;
+                img_new.TaxonName = obs.TaxonFullName;
+                img_new.TaxonId = obs.TaxonId;
+                img_new.UserId = userId;
                 _obsContext.Add(img_new);
                 _obsContext.SaveChanges();
             }

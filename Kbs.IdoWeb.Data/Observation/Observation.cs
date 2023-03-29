@@ -22,7 +22,7 @@ namespace Kbs.IdoWeb.Data.Observation
         public Guid? TaxonGuid { get; set; }
         public int EventId { get; set; }
         [Column(TypeName = "date")]
-        public DateTime HabitatDate { get; set; }
+        public DateTime? HabitatDate { get; set; }
         [Column(TypeName = "date")]
         public DateTime? HabitatDateTo { get; set; }
         public int? AdviceCount { get; set; }
@@ -62,8 +62,6 @@ namespace Kbs.IdoWeb.Data.Observation
         [ForeignKey("SizeGroupId")]
         [InverseProperty("Observation")]
         public virtual SizeGroup SizeGroup { get; set; }
-        [JsonIgnore]
-        [IgnoreDataMember]
         [InverseProperty("Observation")]
         public virtual ICollection<Image> Image { get; set; }
         [ForeignKey("UserId")]

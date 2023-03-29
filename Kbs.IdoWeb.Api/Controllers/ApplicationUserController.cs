@@ -2,15 +2,12 @@
 using Kbs.IdoWeb.Data.Authentication;
 using Kbs.IdoWeb.Data.Observation;
 using Kbs.IdoWeb.Data.Public;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 using System;
-using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -18,6 +15,13 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.Tokens;
+using System.Diagnostics;
+using NLog;
+using Microsoft.EntityFrameworkCore;
+using NLog.Fluent;
+using System.Collections.Generic;
 
 namespace Kbs.IdoWeb.Api.Controllers
 {
@@ -26,18 +30,19 @@ namespace Kbs.IdoWeb.Api.Controllers
     public class ApplicationUserController : ControllerBase
     {
         private readonly UserManager<ApplicationUser> _userManager;
-        private readonly PublicContext _idoContext;
+        private readonly PublicContext _publicContext;
         private readonly ObservationContext _obsContext;
         private readonly ApplicationSettings _appSettings;
         private readonly IConfiguration _smtpConfig;
+        private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
         private readonly string _domain = ".bodentierhochvier.de";
 
-        public ApplicationUserController(UserManager<ApplicationUser> userManager, IOptions<ApplicationSettings> appSettings, PublicContext idoContext, ObservationContext obsContext, IConfiguration smtpConfiguration)
+        public ApplicationUserController(UserManager<ApplicationUser> userManager, IOptions<ApplicationSettings> appSettings, PublicContext pubContext, ObservationContext obsContext, IConfiguration smtpConfiguration)
         {
             _smtpConfig = smtpConfiguration;
             _userManager = userManager;
             _appSettings = appSettings.Value;
-            _idoContext = idoContext;
+            _publicContext = pubContext;
             _obsContext = obsContext;
         }
 
@@ -89,7 +94,7 @@ namespace Kbs.IdoWeb.Api.Controllers
             try
             {
 
-                AspNetUserDevices device = _idoContext.AspNetUserDevices.Where(i => i.DeviceId == loginModel.deviceId).FirstOrDefault();
+                AspNetUserDevices device = _publicContext.AspNetUserDevices.Where(i => i.DeviceId == loginModel.deviceId).FirstOrDefault();
 
                 if (device == null)
                 {
@@ -103,8 +108,8 @@ namespace Kbs.IdoWeb.Api.Controllers
                             UserId = user.Id,
                             LastAccess = DateTime.MinValue
                         };
-                        _idoContext.Add(device);
-                        _idoContext.SaveChanges();
+                        _publicContext.Add(device);
+                        _publicContext.SaveChanges();
                     }
 
 
@@ -126,8 +131,8 @@ namespace Kbs.IdoWeb.Api.Controllers
 
                     device.LastAccess = DateTime.Now;
                     device.DeviceHash = sb.ToString();
-                    _idoContext.Update(device);
-                    _idoContext.SaveChanges();
+                    _publicContext.Update(device);
+                    _publicContext.SaveChanges();
 
                     return sb.ToString();
                 }
@@ -143,12 +148,12 @@ namespace Kbs.IdoWeb.Api.Controllers
         }
 
         [HttpPost("Login/MobileV2")]
-        public async Task<string> LoginMobileAsync_v2 (LoginModelMobile loginModel)
+        public async Task<string> LoginMobileAsync_v2(LoginModelMobile loginModel)
         {
             try
             {
 
-                AspNetUserDevices device = _idoContext.AspNetUserDevices.Where(i => i.DeviceId == loginModel.deviceId).FirstOrDefault();
+                AspNetUserDevices device = _publicContext.AspNetUserDevices.Where(i => i.DeviceId == loginModel.deviceId).FirstOrDefault();
 
                 if (device == null)
                 {
@@ -162,8 +167,8 @@ namespace Kbs.IdoWeb.Api.Controllers
                             UserId = user.Id,
                             LastAccess = DateTime.MinValue
                         };
-                        _idoContext.Add(device);
-                        _idoContext.SaveChanges();
+                        _publicContext.Add(device);
+                        _publicContext.SaveChanges();
                     }
 
 
@@ -185,16 +190,24 @@ namespace Kbs.IdoWeb.Api.Controllers
 
                     device.LastAccess = DateTime.Now;
                     device.DeviceHash = sb.ToString();
-                    _idoContext.Update(device);
-                    _idoContext.SaveChanges();
+                    _publicContext.Update(device);
+                    _publicContext.SaveChanges();
 
                     return JsonConvert.SerializeObject(new { DeviceHash = sb.ToString(), FirstName = user.FirstName, LastName = user.LastName });
                 }
                 else
                 {
                     var user = await _userManager.FindByNameAsync(Uri.UnescapeDataString(loginModel.username));
-                    if(user != null)
+                    if (user != null)
                     {
+                        //allow multiple logins on same device
+                        if (user.Id != device.UserId)
+                        {
+                            device.UserId = user.Id;
+                            device.LastAccess = DateTime.Now;
+                            _publicContext.Update(device);
+                            _publicContext.SaveChanges();
+                        }
                         return JsonConvert.SerializeObject(new { DeviceHash = device.DeviceHash.ToString(), FirstName = user.FirstName, LastName = user.LastName });
                     }
                     return "invalid user";
@@ -204,6 +217,76 @@ namespace Kbs.IdoWeb.Api.Controllers
             {
                 return "invalid user";
             }
+        }
+
+
+        [HttpPost("Delete/Mobile")]
+        public async Task<string> DeleteAccountFromMobileAsync(UserDeleteRequest userDeleteRequest)
+        {
+            try
+            {
+                if (userDeleteRequest != null)
+                {
+                    Logger.Error(JsonConvert.SerializeObject(userDeleteRequest));
+                    //return JsonConvert.SerializeObject(userDeleteRequest);
+                    if (!String.IsNullOrEmpty(userDeleteRequest.UserName) && !String.IsNullOrEmpty(userDeleteRequest.DeviceId) && !String.IsNullOrEmpty(userDeleteRequest.DeviceHash))
+                    {
+                        AspNetUserDevices device = _publicContext.AspNetUserDevices.Where(i => i.DeviceId == userDeleteRequest.DeviceId).FirstOrDefault();
+
+                        if (device != null)
+                        {
+                            try
+                            {
+                                _publicContext.AspNetUserDevices.Remove(device);
+                                _publicContext.SaveChanges();
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Error(ex);
+                            }
+
+
+                            var user = await _userManager.FindByNameAsync(Uri.UnescapeDataString(userDeleteRequest.UserName));
+                            if (user != null)
+                            {
+                                //_idoContext.AspNetUserDevices.Remove(device);
+                                try
+                                {
+                                    List<Observation> obList = _obsContext.Observation.Where(obs => obs.UserId == user.Id).ToList();
+                                    List<Event> evList = _obsContext.Event.Where(ev => ev.UserId == user.Id).ToList();
+                                    _obsContext.Event.RemoveRange(evList);
+                                    _obsContext.Observation.RemoveRange(obList);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.Error(ex);
+                                }
+
+                                IdentityResult iRes = await _userManager.DeleteAsync(user);
+                                if (iRes != null)
+                                {
+                                    if (iRes.Succeeded)
+                                    {
+                                        return "success";
+                                    }
+                                    Logger.Error(iRes.Errors.ToString());
+                                }
+                                return iRes.Errors.ToString();
+                            }
+                            else
+                            {
+                                Logger.Warn(JsonConvert.SerializeObject(device));
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex.InnerException);
+                return ex.InnerException.ToString();
+            }
+            return "error";
         }
 
 
@@ -355,6 +438,8 @@ namespace Kbs.IdoWeb.Api.Controllers
             }
         }
 
+
+
         [HttpPost("PasswordReset")]
         //POST : /api/ApplicationUser/PasswordReset
         public async Task<ActionResult> PostPasswordReset(ResetPasswordModel reset)
@@ -411,6 +496,21 @@ namespace Kbs.IdoWeb.Api.Controllers
             public string password { get; set; }
             public string comment { get; set; }
             public string source { get; set; }
+        }
+
+
+        public class UserDeleteRequest
+        {
+            public string DeviceHash { get; set; }
+            public string DeviceId { get; set; }
+            public string UserName { get; set; }
+
+            public UserDeleteRequest(string v1, string v2, string v3)
+            {
+                this.DeviceId = v1;
+                this.DeviceHash = v2;
+                this.UserName = v3;
+            }
         }
     }
 }

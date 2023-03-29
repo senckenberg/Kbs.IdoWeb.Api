@@ -17,6 +17,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Text;
+using NLog.Web;
+using Microsoft.Extensions.Logging;
+using NLog.Extensions.Logging;
 
 namespace Kbs.IdoWeb.Api
 {
@@ -122,7 +125,7 @@ namespace Kbs.IdoWeb.Api
 		}
 
 		// This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-		public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+		public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
 		{
 			if (env.IsDevelopment())
 			{
@@ -137,8 +140,9 @@ namespace Kbs.IdoWeb.Api
 			app.UseAuthentication();
 			app.UseHttpsRedirection();
 			app.UseCors("OneOrigin");
-			//app.UseCors("AnyOrigin");
-			app.UseMvc();
+
+            //app.UseCors("AnyOrigin");
+            app.UseMvc();
 		}
 	}
 }

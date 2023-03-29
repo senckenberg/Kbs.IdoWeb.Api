@@ -26,9 +26,9 @@ namespace Kbs.IdoWeb.Data.Observation
         [StringLength(100)]
         public string AuthorName { get; set; }
         public int? TkNr { get; set; }
-        [Column(TypeName = "numeric(10,7)")]
+        [Column(TypeName = "numeric(12,7)")]
         public decimal? LongitudeDecimal { get; set; }
-        [Column(TypeName = "numeric(10,7)")]
+        [Column(TypeName = "numeric(12,7)")]
         public decimal? LatitudeDecimal { get; set; }
         public string UserId { get; set; }
         public int? ApprovalStateId { get; set; }
