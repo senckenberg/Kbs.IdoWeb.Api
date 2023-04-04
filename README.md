@@ -32,7 +32,7 @@ Auftraggeber/Rechteinhaber: [Senckenberg Museum für Naturkunde Görlitz](https:
 Entwicklung: [Kunert Business Software GmbH](https://www.kbs-leipzig.de)
 
 ## Lizenz  
-APP - BODENTIER hoch 4 Copyright © 2021 Senckenberg Museum für Naturkunde Görlitz; entwickelt von Kunert Business Software GmbH, im Rahmen des Verbundprojekts museum4punkt0.
+APP - BODENTIER hoch 4 Copyright © 2023 Senckenberg Museum für Naturkunde Görlitz; entwickelt von Kunert Business Software GmbH, im Rahmen des Verbundprojekts museum4punkt0.
 
 Dieses Programm ist freie Software: Sie können es unter den Bedingungen der GNU General Public License, wie von der Free Software Foundation veröffentlicht, weitergeben und/oder modifizieren, entweder in Version 3 der Lizenz oder (nach Ihrer Wahl) in einer späteren Version.
 
