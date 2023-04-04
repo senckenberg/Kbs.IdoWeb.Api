@@ -29,7 +29,7 @@ http://www.kbs-leipzig.de/
 
 ## Credits  
 Auftraggeber/Rechteinhaber: [Senckenberg Museum für Naturkunde Görlitz](https://museumgoerlitz.senckenberg.de/)  
-Entwicklung: [Kunert Business Software GmbH](https://www.kbs-leipzig.de/kbsweb/)
+Entwicklung: [Kunert Business Software GmbH](https://www.kbs-leipzig.de)
 
 ## Lizenz  
 APP - BODENTIER hoch 4 Copyright © 2021 Senckenberg Museum für Naturkunde Görlitz; entwickelt von Kunert Business Software GmbH, im Rahmen des Verbundprojekts museum4punkt0.
